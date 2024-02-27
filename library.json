@@ -1,0 +1,32 @@
+{
+    "name": "ESPressio-WiFi",
+    "description": "WiFi Component Library intended for use with ESP microcontrollers",
+    "keywords": "wifi,network,networking,management,connectivity,connection,espressio",
+    "authors": {
+        "name": "Flowduino",
+        "maintainer": true,
+        "url": "https://flowduino.com"
+    },
+    "build": {
+        "flags": [
+            "-DESPRESSIO_WIFI"
+        ],
+        "unflags": []
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Flowduino/ESPressio-WiFi.git"
+    },
+    "version": "1.0.0",
+    "license": "Apache-2.0",
+    "frameworks": "*",
+    "platforms": "*",
+    "dependencies": [
+        {
+            "name": "Flowduino ESPressio-WiFi",
+            "version": "1.0.0",
+            "url": "https://github.com/Flowduino/ESPressio-WiFi.git",
+            "platforms": "*"
+        }
+    ]
+}
