@@ -19,14 +19,10 @@
     },
     "version": "1.0.0",
     "license": "Apache-2.0",
-    "frameworks": "*",
-    "platforms": "*",
-    "dependencies": [
-        {
-            "name": "Flowduino ESPressio-WiFi",
-            "version": "1.0.0",
-            "url": "https://github.com/Flowduino/ESPressio-WiFi.git",
-            "platforms": "*"
-        }
-    ]
+    "frameworks": "arduino",
+    "platforms": [
+        "espressif32",
+        "espressif8266"
+    ],
+    "dependencies": []
 }
