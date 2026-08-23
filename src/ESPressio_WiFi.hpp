@@ -90,7 +90,9 @@ public:
 
     WiFiRuntimeState State() const {
         std::lock_guard<std::mutex> lock(_mutex);
-        return _state;
+        auto state = _state;
+        state.Client.Selection = _selectionState;
+        return state;
     }
 
     std::vector<ScanResult> LastScanResults() const {
@@ -108,12 +110,12 @@ public:
         _workSignal = std::move(signal);
     }
 
-    void SetConfigurationStore(IWiFiConfigurationStore* store) noexcept {
+    void SetConfigurationStore(IWiFiConfigurationStore* store) {
         std::lock_guard<std::mutex> lock(_mutex);
         _configurationStore = store;
     }
 
-    IWiFiConfigurationStore* ConfigurationStore() const noexcept {
+    IWiFiConfigurationStore* ConfigurationStore() const {
         std::lock_guard<std::mutex> lock(_mutex);
         return _configurationStore;
     }
@@ -145,8 +147,7 @@ public:
         auto result = store->Load(loaded);
         if (!result) return result;
         if (apply) {
-            const auto status = Configure(std::move(loaded));
-            if (status != WiFiStatus::Success) {
+            if (Configure(std::move(loaded)) != WiFiStatus::Success) {
                 return WiFiConfigurationStoreResult::Fail(WiFiConfigurationStoreStatus::StorageError, "Configuration loaded but could not be applied to the WiFi platform");
             }
         } else {
@@ -169,6 +170,7 @@ public:
             _configuration = std::move(configuration);
             _eligibleCandidates.clear();
             _nextCandidateIndex = 0;
+            _selectionState = {};
             scanOnStartup = UsesClient(_configuration.Mode) && _configuration.Client.Enabled &&
                 !_configuration.Client.Networks.empty() && _configuration.Client.Selection.AutomaticSelection &&
                 _configuration.Client.Selection.ScanOnStartup;
@@ -179,56 +181,75 @@ public:
     }
 
     WiFiStatus ApplyConfiguration() { return Configure(Configuration()); }
-
     WiFiStatus Disable() { const auto r = _platform.Disable(); SignalWork(); return r; }
     WiFiStatus ConnectClient() { const auto r = _platform.ConnectClient(); SignalWork(); return r; }
     WiFiStatus DisconnectClient() { const auto r = _platform.DisconnectClient(); SignalWork(); return r; }
     WiFiStatus StartAccessPoint() { const auto r = _platform.StartAccessPoint(); SignalWork(); return r; }
     WiFiStatus StopAccessPoint() { const auto r = _platform.StopAccessPoint(); SignalWork(); return r; }
+
     WiFiStatus Scan() {
         const auto r = _platform.StartScan();
-        if (r == WiFiStatus::Success) SetSelectionState(ClientNetworkSelectionState::Scanning);
+        bool selectionScan = false;
+        if (r == WiFiStatus::Success) {
+            std::lock_guard<std::mutex> lock(_mutex);
+            selectionScan = UsesClient(_configuration.Mode) && _configuration.Client.Enabled &&
+                _configuration.Client.Selection.AutomaticSelection && !_configuration.Client.Networks.empty() &&
+                _state.Client.State != ClientState::Connected;
+        }
+        if (selectionScan) SetSelectionState(ClientNetworkSelectionState::Scanning);
         SignalWork();
         return r;
     }
 
     bool AddOrUpdateClientNetwork(ClientNetworkProfile profile) {
         if (profile.SSID.empty()) return false;
-        std::lock_guard<std::mutex> lock(_mutex);
-        auto it = std::find_if(_configuration.Client.Networks.begin(), _configuration.Client.Networks.end(), [&](const ClientNetworkProfile& existing){ return existing.SSID == profile.SSID; });
-        if (it == _configuration.Client.Networks.end()) _configuration.Client.Networks.push_back(std::move(profile));
-        else *it = std::move(profile);
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            auto it = std::find_if(_configuration.Client.Networks.begin(), _configuration.Client.Networks.end(), [&](const ClientNetworkProfile& existing){ return existing.SSID == profile.SSID; });
+            if (it == _configuration.Client.Networks.end()) _configuration.Client.Networks.push_back(std::move(profile));
+            else *it = std::move(profile);
+        }
+        SignalWork();
         return true;
     }
 
     bool RemoveClientNetwork(const std::string& ssid) {
-        std::lock_guard<std::mutex> lock(_mutex);
-        auto& networks = _configuration.Client.Networks;
-        const auto oldSize = networks.size();
-        networks.erase(std::remove_if(networks.begin(), networks.end(), [&](const ClientNetworkProfile& p){ return p.SSID == ssid; }), networks.end());
-        return networks.size() != oldSize;
+        bool removed = false;
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            auto& networks = _configuration.Client.Networks;
+            const auto oldSize = networks.size();
+            networks.erase(std::remove_if(networks.begin(), networks.end(), [&](const ClientNetworkProfile& p){ return p.SSID == ssid; }), networks.end());
+            removed = networks.size() != oldSize;
+        }
+        if (removed) SignalWork();
+        return removed;
     }
 
     bool SetClientNetworkPriority(const std::string& ssid, uint16_t priority) {
-        std::lock_guard<std::mutex> lock(_mutex);
-        for (auto& p : _configuration.Client.Networks) {
-            if (p.SSID == ssid) { p.Priority = priority; return true; }
+        bool changed = false;
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            for (auto& p : _configuration.Client.Networks) {
+                if (p.SSID == ssid) { p.Priority = priority; changed = true; break; }
+            }
         }
-        return false;
+        if (changed) SignalWork();
+        return changed;
     }
 
-    void OnModeChanged(ModeCallback cb) { _modeCallback = std::move(cb); }
-    void OnClientStateChanged(ClientCallback cb) { _clientCallback = std::move(cb); }
-    void OnAccessPointStateChanged(AccessPointCallback cb) { _apCallback = std::move(cb); }
-    void OnScanStateChanged(ScanStateCallback cb) { _scanStateCallback = std::move(cb); }
-    void OnScanCompleted(ScanCallback cb) { _scanCallback = std::move(cb); }
-    void OnAccessPointStationConnected(StationCallback cb) { _stationConnected = std::move(cb); }
-    void OnAccessPointStationDisconnected(StationCallback cb) { _stationDisconnected = std::move(cb); }
-    void OnClientIPAddressAcquired(IPAddressCallback cb) { _ipAcquired = std::move(cb); }
-    void OnClientIPAddressLost(IPLostCallback cb) { _ipLost = std::move(cb); }
-    void OnClientNetworkSelectionChanged(SelectionCallback cb) { _selectionCallback = std::move(cb); }
-    void OnClientNetworkSelected(SelectedNetworkCallback cb) { _selectedCallback = std::move(cb); }
-    void OnClientNoKnownNetworkAvailable(SimpleCallback cb) { _noKnownNetworkCallback = std::move(cb); }
+    void OnModeChanged(ModeCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _modeCallback = std::move(cb); }
+    void OnClientStateChanged(ClientCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _clientCallback = std::move(cb); }
+    void OnAccessPointStateChanged(AccessPointCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _apCallback = std::move(cb); }
+    void OnScanStateChanged(ScanStateCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _scanStateCallback = std::move(cb); }
+    void OnScanCompleted(ScanCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _scanCallback = std::move(cb); }
+    void OnAccessPointStationConnected(StationCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _stationConnected = std::move(cb); }
+    void OnAccessPointStationDisconnected(StationCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _stationDisconnected = std::move(cb); }
+    void OnClientIPAddressAcquired(IPAddressCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _ipAcquired = std::move(cb); }
+    void OnClientIPAddressLost(IPLostCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _ipLost = std::move(cb); }
+    void OnClientNetworkSelectionChanged(SelectionCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _selectionCallback = std::move(cb); }
+    void OnClientNetworkSelected(SelectedNetworkCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _selectedCallback = std::move(cb); }
+    void OnClientNoKnownNetworkAvailable(SimpleCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _noKnownNetworkCallback = std::move(cb); }
 
     WiFiStatus ProcessOnce() {
         WiFiRuntimeState next;
@@ -246,6 +267,8 @@ public:
         {
             std::lock_guard<std::mutex> lock(_mutex);
             before = _state;
+            before.Client.Selection = _selectionState;
+            next.Client.Selection = _selectionState;
             _state = next;
             if (!scan.empty()) _lastScanResults = scan;
         }
@@ -253,23 +276,28 @@ public:
         NotifyStateTransitions(before, next);
 
         if (!scan.empty()) {
-            if (_scanCallback) _scanCallback(scan);
+            auto callback = CopyCallback(_scanCallback);
+            if (callback) callback(scan);
             _observable->ScanComplete(scan);
             HandleCompletedScan(scan);
         }
 
         for (const auto& event : events) NotifyPlatformEvent(event);
-
         HandleConnectionProgress(before.Client.State, next.Client.State);
         return WiFiStatus::Success;
     }
 
-    // Kept as a compatibility alias for 0.1.x callers. 0.2.x applications should
-    // use WiFiWorker and do not need to call this from loop().
+    // 0.1.x compatibility alias. Normal 0.2.x applications use WiFiWorker.
     WiFiStatus Poll() { return ProcessOnce(); }
 
 private:
     static bool UsesClient(WiFiMode mode) { return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient; }
+
+    template<typename T>
+    T CopyCallback(const T& callback) const {
+        std::lock_guard<std::mutex> lock(_callbackMutex);
+        return callback;
+    }
 
     void SignalWork() {
         WorkSignal signal;
@@ -285,12 +313,13 @@ private:
         ClientNetworkSelectionRuntimeState after;
         {
             std::lock_guard<std::mutex> lock(_mutex);
-            before = _state.Client.Selection;
-            _state.Client.Selection.State = state;
-            after = _state.Client.Selection;
+            before = _selectionState;
+            _selectionState.State = state;
+            after = _selectionState;
         }
         if (before.State != after.State) {
-            if (_selectionCallback) _selectionCallback(before, after);
+            auto callback = CopyCallback(_selectionCallback);
+            if (callback) callback(before, after);
             _observable->Selection(before, after);
         }
     }
@@ -330,22 +359,33 @@ private:
 
     void HandleCompletedScan(const std::vector<ScanResult>& scan) {
         WiFiConfiguration config;
+        ClientState clientState;
         {
             std::lock_guard<std::mutex> lock(_mutex);
             config = _configuration;
+            clientState = _state.Client.State;
         }
         if (!UsesClient(config.Mode) || !config.Client.Enabled || !config.Client.Selection.AutomaticSelection || config.Client.Networks.empty()) return;
+
+        // Default roaming policy: a healthy existing connection is sticky. A manual
+        // background scan may update LastScanResults but never disconnects merely
+        // because a higher-priority AP has appeared.
+        if (clientState == ClientState::Connected) return;
 
         auto candidates = BuildCandidates(scan);
         {
             std::lock_guard<std::mutex> lock(_mutex);
             _eligibleCandidates = candidates;
             _nextCandidateIndex = 0;
-            _state.Client.Selection.EligibleCandidateCount = candidates.size();
+            _selectionState.EligibleCandidateCount = candidates.size();
+            _selectionState.SelectedSSID.clear();
+            _selectionState.SelectedPriority = 0;
+            _selectionState.SelectedProfileIndex = 0;
         }
         if (candidates.empty()) {
             SetSelectionState(ClientNetworkSelectionState::NoKnownNetworkAvailable);
-            if (_noKnownNetworkCallback) _noKnownNetworkCallback();
+            auto callback = CopyCallback(_noKnownNetworkCallback);
+            if (callback) callback();
             _observable->NoKnownNetwork();
             return;
         }
@@ -363,9 +403,9 @@ private:
                 candidate = _eligibleCandidates[_nextCandidateIndex++];
                 if (candidate.ProfileIndex < _configuration.Client.Networks.size()) {
                     profile = _configuration.Client.Networks[candidate.ProfileIndex];
-                    _state.Client.Selection.SelectedSSID = candidate.SSID;
-                    _state.Client.Selection.SelectedPriority = candidate.Priority;
-                    _state.Client.Selection.SelectedProfileIndex = candidate.ProfileIndex;
+                    _selectionState.SelectedSSID = candidate.SSID;
+                    _selectionState.SelectedPriority = candidate.Priority;
+                    _selectionState.SelectedProfileIndex = candidate.ProfileIndex;
                     available = true;
                 }
             }
@@ -374,7 +414,8 @@ private:
             SetSelectionState(ClientNetworkSelectionState::Exhausted);
             return WiFiStatus::InvalidConfiguration;
         }
-        if (_selectedCallback) _selectedCallback(candidate);
+        auto callback = CopyCallback(_selectedCallback);
+        if (callback) callback(candidate);
         _observable->Selected(candidate);
         SetSelectionState(ClientNetworkSelectionState::Connecting);
         const auto result = _platform.ConnectClient(profile);
@@ -404,49 +445,51 @@ private:
 
     void NotifyStateTransitions(const WiFiRuntimeState& before, const WiFiRuntimeState& next) {
         if (before.Mode != next.Mode) {
-            if (_modeCallback) _modeCallback(before.Mode, next.Mode);
+            auto callback = CopyCallback(_modeCallback); if (callback) callback(before.Mode, next.Mode);
             _observable->Mode(before.Mode, next.Mode);
         }
         if (before.Client.State != next.Client.State || before.Client.Network.Address != next.Client.Network.Address) {
-            if (_clientCallback) _clientCallback(before.Client, next.Client);
+            auto callback = CopyCallback(_clientCallback); if (callback) callback(before.Client, next.Client);
             _observable->Client(before.Client, next.Client);
         }
         if (before.AccessPoint.State != next.AccessPoint.State || before.AccessPoint.ConnectedStations != next.AccessPoint.ConnectedStations) {
-            if (_apCallback) _apCallback(before.AccessPoint, next.AccessPoint);
+            auto callback = CopyCallback(_apCallback); if (callback) callback(before.AccessPoint, next.AccessPoint);
             _observable->AccessPoint(before.AccessPoint, next.AccessPoint);
         }
         if (before.Scan != next.Scan) {
-            if (_scanStateCallback) _scanStateCallback(before.Scan, next.Scan);
+            auto callback = CopyCallback(_scanStateCallback); if (callback) callback(before.Scan, next.Scan);
             _observable->ScanState(before.Scan, next.Scan);
         }
     }
 
     void NotifyPlatformEvent(const WiFiPlatformEvent& event) {
         switch (event.Kind) {
-            case WiFiPlatformEventKind::AccessPointStationConnected:
-                if (_stationConnected) _stationConnected(event.Station);
-                _observable->APStationConnected(event.Station);
-                break;
-            case WiFiPlatformEventKind::AccessPointStationDisconnected:
-                if (_stationDisconnected) _stationDisconnected(event.Station);
-                _observable->APStationDisconnected(event.Station);
-                break;
-            case WiFiPlatformEventKind::ClientIPAddressAcquired:
-                if (_ipAcquired) _ipAcquired(event.Network);
-                _observable->IP(event.Network);
-                break;
-            case WiFiPlatformEventKind::ClientIPAddressLost:
-                if (_ipLost) _ipLost();
-                _observable->IPLost();
-                break;
+            case WiFiPlatformEventKind::AccessPointStationConnected: {
+                auto callback = CopyCallback(_stationConnected); if (callback) callback(event.Station);
+                _observable->APStationConnected(event.Station); break;
+            }
+            case WiFiPlatformEventKind::AccessPointStationDisconnected: {
+                auto callback = CopyCallback(_stationDisconnected); if (callback) callback(event.Station);
+                _observable->APStationDisconnected(event.Station); break;
+            }
+            case WiFiPlatformEventKind::ClientIPAddressAcquired: {
+                auto callback = CopyCallback(_ipAcquired); if (callback) callback(event.Network);
+                _observable->IP(event.Network); break;
+            }
+            case WiFiPlatformEventKind::ClientIPAddressLost: {
+                auto callback = CopyCallback(_ipLost); if (callback) callback();
+                _observable->IPLost(); break;
+            }
         }
     }
 
     IWiFiPlatform& _platform;
     mutable std::mutex _mutex;
+    mutable std::mutex _callbackMutex;
     IWiFiConfigurationStore* _configurationStore = nullptr;
     WiFiConfiguration _configuration{};
     WiFiRuntimeState _state{};
+    ClientNetworkSelectionRuntimeState _selectionState{};
     std::vector<ScanResult> _lastScanResults;
     std::vector<ClientNetworkCandidate> _eligibleCandidates;
     std::size_t _nextCandidateIndex = 0;
