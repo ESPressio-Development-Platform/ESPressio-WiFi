@@ -11,7 +11,6 @@ public:
     virtual void OnWiFiModeChanged(WiFiMode, WiFiMode) {}
     virtual void OnClientStateChanged(const ClientRuntimeState&, const ClientRuntimeState&) {}
     virtual void OnAccessPointStateChanged(const AccessPointRuntimeState&, const AccessPointRuntimeState&) {}
-    virtual void OnProvisioningStateChanged(const ProvisioningRuntimeState&, const ProvisioningRuntimeState&) {}
     virtual void OnScanStateChanged(ScanState, ScanState) {}
     virtual void OnScanCompleted(const std::vector<ScanResult>&) {}
     virtual void OnAccessPointStationConnected(const MacAddress&) {}
