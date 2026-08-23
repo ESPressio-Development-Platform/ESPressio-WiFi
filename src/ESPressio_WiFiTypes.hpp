@@ -26,6 +26,7 @@ struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     std::array<uint8_t,4> Octets{};
     IPv4Address() = default;
     IPv4Address(uint8_t a,uint8_t b,uint8_t c,uint8_t d) : Octets{{a,b,c,d}} {}
+    ~IPv4Address() = default;
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("octets", Octets))
     bool operator==(const IPv4Address& other) const noexcept { return Octets==other.Octets; }
     bool operator!=(const IPv4Address& other) const noexcept { return !(*this==other); }
@@ -35,6 +36,7 @@ struct IPv4Address final : Serializable::Serializable<IPv4Address> {
 struct MacAddress final : Serializable::Serializable<MacAddress> {
     ESPRESSIO_SERIALIZABLE_TYPE(MacAddress)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~MacAddress() = default;
     std::array<uint8_t,6> Octets{};
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("octets", Octets))
     bool operator==(const MacAddress& other) const noexcept { return Octets==other.Octets; }
@@ -44,6 +46,7 @@ struct MacAddress final : Serializable::Serializable<MacAddress> {
 struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
     ESPRESSIO_SERIALIZABLE_TYPE(NetworkAddress)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~NetworkAddress() = default;
     IPv4Address Address{};
     IPv4Address Gateway{};
     IPv4Address SubnetMask{255,255,255,0};
@@ -61,6 +64,7 @@ struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
 struct ScanResult final : Serializable::Serializable<ScanResult> {
     ESPRESSIO_SERIALIZABLE_TYPE(ScanResult)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~ScanResult() = default;
     std::string SSID;
     MacAddress BSSID{};
     int32_t RSSI=0;
