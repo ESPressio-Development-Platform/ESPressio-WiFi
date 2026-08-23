@@ -2,28 +2,76 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <ESPressio_Serializable.hpp>
 #include "ESPressio_WiFiTypes.hpp"
 
 namespace ESPressio::WiFi {
 
-struct ClientConfiguration final : Serializable::Serializable<ClientConfiguration> {
-    ESPRESSIO_SERIALIZABLE_TYPE(ClientConfiguration)
+struct ClientNetworkProfile final : Serializable::Serializable<ClientNetworkProfile> {
+    ESPRESSIO_SERIALIZABLE_TYPE(ClientNetworkProfile)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
 
+    std::string SSID;
+    std::string Password;
+    uint16_t Priority = 100;
+    bool Enabled = true;
+    AddressMode Addressing = AddressMode::DHCP;
+    NetworkAddress StaticNetwork{};
+
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("ssid", SSID),
+        ESPRESSIO_PROPERTY_SENSITIVE("password", Password),
+        ESPRESSIO_PROPERTY("priority", Priority),
+        ESPRESSIO_PROPERTY("enabled", Enabled),
+        ESPRESSIO_PROPERTY("addressing", Addressing),
+        ESPRESSIO_PROPERTY("staticNetwork", StaticNetwork)
+    )
+};
+
+struct ClientNetworkSelectionConfiguration final
+    : Serializable::Serializable<ClientNetworkSelectionConfiguration> {
+    ESPRESSIO_SERIALIZABLE_TYPE(ClientNetworkSelectionConfiguration)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+
+    bool AutomaticSelection = true;
+    bool ScanOnStartup = true;
+    bool ScanOnDisconnect = true;
+    bool TryNextOnFailure = true;
+
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("automaticSelection", AutomaticSelection),
+        ESPRESSIO_PROPERTY("scanOnStartup", ScanOnStartup),
+        ESPRESSIO_PROPERTY("scanOnDisconnect", ScanOnDisconnect),
+        ESPRESSIO_PROPERTY("tryNextOnFailure", TryNextOnFailure)
+    )
+};
+
+struct ClientConfiguration final : Serializable::Serializable<ClientConfiguration> {
+    ESPRESSIO_SERIALIZABLE_TYPE(ClientConfiguration)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(2)
+
     bool Enabled = false;
+
+    // Legacy/single-network fields remain available for source compatibility.
+    // When Networks is non-empty the remembered-network collection is authoritative.
     std::string SSID;
     std::string Password;
     AddressMode Addressing = AddressMode::DHCP;
     NetworkAddress StaticNetwork{};
+
+    std::vector<ClientNetworkProfile> Networks;
+    ClientNetworkSelectionConfiguration Selection{};
 
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
         ESPRESSIO_PROPERTY("enabled", Enabled),
         ESPRESSIO_PROPERTY("ssid", SSID),
         ESPRESSIO_PROPERTY_SENSITIVE("password", Password),
         ESPRESSIO_PROPERTY("addressing", Addressing),
-        ESPRESSIO_PROPERTY("staticNetwork", StaticNetwork)
+        ESPRESSIO_PROPERTY("staticNetwork", StaticNetwork),
+        ESPRESSIO_PROPERTY("networks", Networks),
+        ESPRESSIO_PROPERTY("selection", Selection)
     )
 };
 
@@ -98,7 +146,7 @@ struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
 
 struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiConfiguration)
-    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(2)
 
     WiFiMode Mode = WiFiMode::AccessPoint;
     std::string Hostname = "espressio";
