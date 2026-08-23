@@ -19,12 +19,16 @@
 - Added thread-safe snapshot access for configuration, runtime state, scans and remembered-network candidates.
 - Added `WiFiMode::APUntilClient` for IoT provisioning/recovery behaviour where the device prefers remembered Client networks but exposes a fallback AP while Client connectivity is unavailable.
 - Added Serializable `APUntilClientConfiguration` with configurable fallback timeout and retry-scan interval.
+- Added explicit `APUntilClientState` / `APUntilClientRuntimeState` lifecycle reporting for seeking, fallback-AP and connected phases.
+- Added `WiFiManager::OnAPUntilClientStateChanged(...)` and `IWiFiObserver::OnAPUntilClientStateChanged(...)` notifications.
+- Added Serializable `WiFiAPUntilClientStateChangedEvent` and WiFi Event Bridge forwarding for asynchronous lifecycle subscribers.
 - Added immediate fallback AP activation when no remembered networks exist.
 - Added delayed fallback when remembered networks exist but no usable Client connection can be established before the configured timeout.
 - Added AP+STA retry behaviour while the fallback AP is active, allowing remembered networks to be retried without deliberately dropping provisioning/control clients.
 - Added automatic fallback-AP shutdown and return to STA-only radio mode after successful Client connectivity.
+- Added automatic re-arming of the fallback lifecycle if an established Client connection is subsequently lost.
 - Added immediate remembered-network retry when a profile is added or updated during `APUntilClient` fallback operation.
-- Added `wifi mode ap-until-client`, `wifi ap-until-client fallback-timeout` and `wifi ap-until-client retry-interval` Command controls.
+- Added `wifi mode ap-until-client`, `wifi ap-until-client status`, `wifi ap-until-client retry-now`, `wifi ap-until-client fallback-timeout` and `wifi ap-until-client retry-interval` Command controls.
 
 ### Changed
 
