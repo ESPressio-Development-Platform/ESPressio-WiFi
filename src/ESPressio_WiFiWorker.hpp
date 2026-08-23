@@ -1,6 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
+#include <mutex>
 
 #include <ESPressio_PrecisionThread.hpp>
 #include <ESPressio_PrecisionThreadTraits.hpp>
@@ -26,7 +28,7 @@ public:
         WiFiManager& manager,
         WiFiWorkerConfiguration configuration = {}
     ) : _manager(manager), _configuration(configuration) {
-        ApplyRuntimeConfiguration();
+        ApplyRuntimeConfiguration(configuration);
         _manager.SetWorkSignal([this]() { this->Bump(); });
     }
 
@@ -35,17 +37,23 @@ public:
         Shutdown();
     }
 
-    const WiFiWorkerConfiguration& Configuration() const noexcept {
+    WiFiWorkerConfiguration Configuration() const {
+        std::lock_guard<std::mutex> lock(_configurationMutex);
         return _configuration;
     }
 
     void Configure(WiFiWorkerConfiguration configuration) {
-        _configuration = configuration;
-        ApplyRuntimeConfiguration();
+        {
+            std::lock_guard<std::mutex> lock(_configurationMutex);
+            _configuration = configuration;
+        }
+        ApplyRuntimeConfiguration(configuration);
         Bump();
     }
 
-    WiFiStatus LastStatus() const noexcept { return _lastStatus; }
+    WiFiStatus LastStatus() const noexcept {
+        return _lastStatus.load();
+    }
 
 protected:
     void Iterate(
@@ -53,13 +61,15 @@ protected:
         Time,
         Threads::SkippedIterationCount
     ) override {
-        _lastStatus = _manager.ProcessOnce();
+        _lastStatus.store(_manager.ProcessOnce());
     }
 
 private:
-    void ApplyRuntimeConfiguration() {
+    void ApplyRuntimeConfiguration(
+        const WiFiWorkerConfiguration& configuration
+    ) {
         const auto period = Units::MilliSeconds<uint32_t>(
-            _configuration.IterationPeriodMilliseconds
+            configuration.IterationPeriodMilliseconds
         );
         SetIterationPeriod(period);
         // PrecisionThread constrains desired period to at least the scheduling
@@ -68,8 +78,9 @@ private:
     }
 
     WiFiManager& _manager;
+    mutable std::mutex _configurationMutex;
     WiFiWorkerConfiguration _configuration{};
-    WiFiStatus _lastStatus = WiFiStatus::Success;
+    std::atomic<WiFiStatus> _lastStatus{WiFiStatus::Success};
 };
 
 } // namespace ESPressio::WiFi
