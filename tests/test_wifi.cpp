@@ -45,11 +45,11 @@ class Observer final : public IWiFiObserver {
 public:
     void OnWiFiModeChanged(WiFiMode,WiFiMode) override { modes++; }
     void OnClientStateChanged(const ClientRuntimeState&,const ClientRuntimeState&) override { clients++; }
-    void OnScanCompleted(const std::vector<ScanResult>& r) override { scans += static_cast<int>(r.size()); }
+    void OnScanCompleted(const std::vector<ScanResult>& r) override { scanCompletions++; scans += static_cast<int>(r.size()); }
     void OnClientNetworkSelectionChanged(const ClientNetworkSelectionRuntimeState&,const ClientNetworkSelectionRuntimeState&) override { selectionChanges++; }
     void OnClientNetworkSelected(const ClientNetworkCandidate& c) override { selected.push_back(c.SSID); selectedRSSI.push_back(c.RSSI); }
     void OnClientNoKnownNetworkAvailable() override { noKnown++; }
-    int modes=0,clients=0,scans=0,selectionChanges=0,noKnown=0;
+    int modes=0,clients=0,scanCompletions=0,scans=0,selectionChanges=0,noKnown=0;
     std::vector<std::string> selected;
     std::vector<int32_t> selectedRSSI;
 };
@@ -105,6 +105,8 @@ int main() {
     assert(wifi.State().Client.Selection.State==ClientNetworkSelectionState::Connected);
 
     // Healthy connections are sticky: a scan cannot force roaming to Preferred.
+    assert(wifi.Scan()==WiFiStatus::Success);
+    assert(wifi.ProcessOnce()==WiFiStatus::Success);
     platform.nextScan={Visible("Preferred",-20,6),Visible("Backup",-80,11)};
     platform.deliverScan=true;
     platform.state.Scan=ScanState::Complete;
@@ -118,7 +120,8 @@ int main() {
     platform.state.Client.State=ClientState::Disconnected;
     platform.state.Revision++;
     assert(wifi.ProcessOnce()==WiFiStatus::Success);
-    assert(platform.scanStarts>=2);
+    assert(platform.scanStarts>=3);
+    assert(wifi.ProcessOnce()==WiFiStatus::Success); // observe Scanning
     platform.nextScan={Visible("Preferred",-80,1),Visible("Preferred",-40,6),Visible("Backup",-20,11)};
     platform.deliverScan=true;
     platform.state.Scan=ScanState::Complete;
@@ -127,17 +130,31 @@ int main() {
     assert(observer.selected.back()=="Preferred");
     assert(observer.selectedRSSI.back()==-40);
 
-    // Disconnect again and prove an unknown-only scan does not invent credentials.
+    // A completed scan with zero results is still a completed selection attempt.
     platform.state.Client.State=ClientState::Disconnected;
     platform.state.Revision++;
+    assert(wifi.ProcessOnce()==WiFiStatus::Success);
+    assert(wifi.ProcessOnce()==WiFiStatus::Success); // observe Scanning
+    platform.nextScan.clear();
+    platform.deliverScan=true;
+    platform.state.Scan=ScanState::Complete;
+    platform.state.Revision++;
+    const int completionsBeforeEmpty=observer.scanCompletions;
+    assert(wifi.ProcessOnce()==WiFiStatus::Success);
+    assert(observer.scanCompletions==completionsBeforeEmpty+1);
+    assert(observer.noKnown==1);
+    assert(wifi.LastScanResults().empty());
+    assert(wifi.State().Client.Selection.State==ClientNetworkSelectionState::NoKnownNetworkAvailable);
+
+    // Unknown-only scans likewise do not invent credentials.
+    assert(wifi.Scan()==WiFiStatus::Success);
     assert(wifi.ProcessOnce()==WiFiStatus::Success);
     platform.nextScan={Visible("Unknown",-10,6)};
     platform.deliverScan=true;
     platform.state.Scan=ScanState::Complete;
     platform.state.Revision++;
     assert(wifi.ProcessOnce()==WiFiStatus::Success);
-    assert(observer.noKnown==1);
-    assert(wifi.State().Client.Selection.State==ClientNetworkSelectionState::NoKnownNetworkAvailable);
+    assert(observer.noKnown==2);
 
     assert(wifi.SetClientNetworkPriority("Backup",500));
     assert(wifi.RemoveClientNetwork("Preferred"));
