@@ -162,7 +162,7 @@ public:
     void UnregisterObserver(IWiFiObserver* observer) { _observable->UnregisterObserver(observer); }
 
     WiFiStatus Configure(WiFiConfiguration configuration) {
-        const auto status = _platform.Apply(configuration);
+        const auto status = WithPlatform([&]() { return _platform.Apply(configuration); });
         if (status != WiFiStatus::Success) return status;
         bool scanOnStartup = false;
         {
@@ -181,14 +181,14 @@ public:
     }
 
     WiFiStatus ApplyConfiguration() { return Configure(Configuration()); }
-    WiFiStatus Disable() { const auto r = _platform.Disable(); SignalWork(); return r; }
-    WiFiStatus ConnectClient() { const auto r = _platform.ConnectClient(); SignalWork(); return r; }
-    WiFiStatus DisconnectClient() { const auto r = _platform.DisconnectClient(); SignalWork(); return r; }
-    WiFiStatus StartAccessPoint() { const auto r = _platform.StartAccessPoint(); SignalWork(); return r; }
-    WiFiStatus StopAccessPoint() { const auto r = _platform.StopAccessPoint(); SignalWork(); return r; }
+    WiFiStatus Disable() { const auto r = WithPlatform([&](){ return _platform.Disable(); }); SignalWork(); return r; }
+    WiFiStatus ConnectClient() { const auto r = WithPlatform([&](){ return _platform.ConnectClient(); }); SignalWork(); return r; }
+    WiFiStatus DisconnectClient() { const auto r = WithPlatform([&](){ return _platform.DisconnectClient(); }); SignalWork(); return r; }
+    WiFiStatus StartAccessPoint() { const auto r = WithPlatform([&](){ return _platform.StartAccessPoint(); }); SignalWork(); return r; }
+    WiFiStatus StopAccessPoint() { const auto r = WithPlatform([&](){ return _platform.StopAccessPoint(); }); SignalWork(); return r; }
 
     WiFiStatus Scan() {
-        const auto r = _platform.StartScan();
+        const auto r = WithPlatform([&](){ return _platform.StartScan(); });
         bool selectionScan = false;
         if (r == WiFiStatus::Success) {
             std::lock_guard<std::mutex> lock(_mutex);
@@ -260,7 +260,7 @@ public:
 
         std::vector<ScanResult> scan;
         std::vector<WiFiPlatformEvent> events;
-        const auto status = _platform.Poll(next, &scan, &events);
+        const auto status = WithPlatform([&]() { return _platform.Poll(next, &scan, &events); });
         if (status != WiFiStatus::Success) return status;
 
         WiFiRuntimeState before;
@@ -292,6 +292,12 @@ public:
 
 private:
     static bool UsesClient(WiFiMode mode) { return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient; }
+
+    template<typename F>
+    WiFiStatus WithPlatform(F&& operation) {
+        std::lock_guard<std::mutex> lock(_platformMutex);
+        return operation();
+    }
 
     template<typename T>
     T CopyCallback(const T& callback) const {
@@ -367,9 +373,7 @@ private:
         }
         if (!UsesClient(config.Mode) || !config.Client.Enabled || !config.Client.Selection.AutomaticSelection || config.Client.Networks.empty()) return;
 
-        // Default roaming policy: a healthy existing connection is sticky. A manual
-        // background scan may update LastScanResults but never disconnects merely
-        // because a higher-priority AP has appeared.
+        // Default roaming policy: a healthy existing connection is sticky.
         if (clientState == ClientState::Connected) return;
 
         auto candidates = BuildCandidates(scan);
@@ -418,7 +422,7 @@ private:
         if (callback) callback(candidate);
         _observable->Selected(candidate);
         SetSelectionState(ClientNetworkSelectionState::Connecting);
-        const auto result = _platform.ConnectClient(profile);
+        const auto result = WithPlatform([&]() { return _platform.ConnectClient(profile); });
         SignalWork();
         return result;
     }
@@ -486,6 +490,7 @@ private:
     IWiFiPlatform& _platform;
     mutable std::mutex _mutex;
     mutable std::mutex _callbackMutex;
+    std::mutex _platformMutex;
     IWiFiConfigurationStore* _configurationStore = nullptr;
     WiFiConfiguration _configuration{};
     WiFiRuntimeState _state{};
