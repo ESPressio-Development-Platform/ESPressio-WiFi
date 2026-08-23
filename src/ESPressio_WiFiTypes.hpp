@@ -18,6 +18,7 @@ enum class ScanState : uint8_t { Idle, Scanning, Complete, Failed };
 enum class NetworkSecurity : uint8_t { Open, WEP, WPA, WPA2, WPA_WPA2, WPA3, WPA2_WPA3, Unknown };
 enum class AddressMode : uint8_t { DHCP, Static };
 enum class ClientNetworkSelectionState : uint8_t { Idle, Scanning, Selecting, Connecting, Connected, NoKnownNetworkAvailable, Exhausted };
+enum class APUntilClientState : uint8_t { Inactive, SeekingClient, FallbackAccessPoint, ClientConnected };
 
 struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     ESPRESSIO_SERIALIZABLE_TYPE(IPv4Address)
@@ -112,10 +113,18 @@ struct AccessPointRuntimeState {
     uint16_t ConnectedStations=0;
 };
 
+struct APUntilClientRuntimeState {
+    APUntilClientState State = APUntilClientState::Inactive;
+    bool FallbackAccessPointActive = false;
+    uint64_t FallbackDeadlineMilliseconds = 0;
+    uint64_t NextRetryMilliseconds = 0;
+};
+
 struct WiFiRuntimeState {
     WiFiMode Mode=WiFiMode::Disabled;
     ClientRuntimeState Client{};
     AccessPointRuntimeState AccessPoint{};
+    APUntilClientRuntimeState APUntilClient{};
     ScanState Scan=ScanState::Idle;
     uint64_t Revision=0;
 };
@@ -186,4 +195,12 @@ ESPRESSIO_ENUM_MAPPING(
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::Connected, "connected"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::NoKnownNetworkAvailable, "no-known-network-available"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::Exhausted, "exhausted")
+)
+
+ESPRESSIO_ENUM_MAPPING(
+    ESPressio::WiFi::APUntilClientState,
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::Inactive, "inactive"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::SeekingClient, "seeking-client"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::FallbackAccessPoint, "fallback-access-point"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::ClientConnected, "client-connected")
 )
