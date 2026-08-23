@@ -17,6 +17,12 @@ public:
     virtual void OnAccessPointStationDisconnected(const MacAddress&) {}
     virtual void OnClientIPAddressAcquired(const NetworkAddress&) {}
     virtual void OnClientIPAddressLost() {}
+    virtual void OnClientNetworkSelectionChanged(
+        const ClientNetworkSelectionRuntimeState&,
+        const ClientNetworkSelectionRuntimeState&
+    ) {}
+    virtual void OnClientNetworkSelected(const ClientNetworkCandidate&) {}
+    virtual void OnClientNoKnownNetworkAvailable() {}
 };
 
 } // namespace ESPressio::WiFi
