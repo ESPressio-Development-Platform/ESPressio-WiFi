@@ -36,6 +36,10 @@ struct IPv4Address final : Serializable::Serializable<IPv4Address> {
 
     std::array<uint8_t, 4> Octets{};
 
+    constexpr IPv4Address() = default;
+    constexpr IPv4Address(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
+        : Octets{{a, b, c, d}} {}
+
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
         ESPRESSIO_PROPERTY("octets", Octets)
     )
@@ -61,7 +65,7 @@ struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
 
     IPv4Address Address{};
     IPv4Address Gateway{};
-    IPv4Address SubnetMask{{}, {{255, 255, 255, 0}}};
+    IPv4Address SubnetMask{255, 255, 255, 0};
     IPv4Address PrimaryDNS{};
     IPv4Address SecondaryDNS{};
 
