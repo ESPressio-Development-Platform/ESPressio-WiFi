@@ -45,7 +45,7 @@ jobs:
           lib_deps =
               ../ESPressio-WiFi
               https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#3.0.2
-              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#0.11.2
+              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#bugfix/23-serializable-value-composition
               https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#0.2.6
               https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#2.2.7
               https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#3.1.6
