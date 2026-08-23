@@ -27,6 +27,12 @@ public:
     void OnAccessPointStateChanged(const WiFi::AccessPointRuntimeState& before, const WiFi::AccessPointRuntimeState& after) override {
         (new WiFiAccessPointStateChangedEvent(before, after))->Queue();
     }
+    void OnAPUntilClientStateChanged(
+        const WiFi::APUntilClientRuntimeState& before,
+        const WiFi::APUntilClientRuntimeState& after
+    ) override {
+        (new WiFiAPUntilClientStateChangedEvent(before, after))->Queue();
+    }
     void OnScanStateChanged(WiFi::ScanState before, WiFi::ScanState after) override {
         (new WiFiScanStateChangedEvent(before, after))->Queue();
     }
