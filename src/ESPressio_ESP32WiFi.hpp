@@ -30,10 +30,7 @@ public:
             case WiFiMode::Disabled: mode = WIFI_MODE_NULL; break;
             case WiFiMode::Client: mode = WIFI_MODE_STA; break;
             case WiFiMode::AccessPoint: mode = WIFI_MODE_AP; break;
-            case WiFiMode::AccessPointClient:
-            case WiFiMode::Provisioning:
-                mode = WIFI_MODE_APSTA;
-                break;
+            case WiFiMode::AccessPointClient: mode = WIFI_MODE_APSTA; break;
         }
         if (!::WiFi.mode(mode)) return WiFiStatus::PlatformError;
         if (!configuration.Hostname.empty()) (void)::WiFi.setHostname(configuration.Hostname.c_str());
@@ -156,15 +153,11 @@ public:
 
 private:
     static bool UsesAP(WiFiMode mode) {
-        return mode == WiFiMode::AccessPoint ||
-            mode == WiFiMode::AccessPointClient ||
-            mode == WiFiMode::Provisioning;
+        return mode == WiFiMode::AccessPoint || mode == WiFiMode::AccessPointClient;
     }
 
     static bool UsesClient(WiFiMode mode) {
-        return mode == WiFiMode::Client ||
-            mode == WiFiMode::AccessPointClient ||
-            mode == WiFiMode::Provisioning;
+        return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient;
     }
 
     static bool ValidateCredential(const std::string& password) {
@@ -352,53 +345,60 @@ private:
             ++_state.Revision;
             return;
         }
-        if (completedScan != nullptr) {
-            completedScan->clear();
-            completedScan->reserve(static_cast<std::size_t>(count));
-            for (int16_t index = 0; index < count; ++index) {
-                ScanResult result;
-                result.SSID = std::string(::WiFi.SSID(index).c_str());
-                result.RSSI = ::WiFi.RSSI(index);
-                result.Channel = static_cast<uint8_t>(::WiFi.channel(index));
-                uint8_t* bssid = ::WiFi.BSSID(index);
-                if (bssid != nullptr) for (std::size_t octet = 0; octet < 6; ++octet) result.BSSID.Octets[octet] = bssid[octet];
-                result.Security = TranslateSecurity(::WiFi.encryptionType(index));
-                completedScan->push_back(std::move(result));
-            }
+        std::vector<ScanResult> results;
+        results.reserve(static_cast<std::size_t>(count));
+        for (int16_t i = 0; i < count; ++i) {
+            ScanResult result;
+            result.SSID = ::WiFi.SSID(i).c_str();
+            result.RSSI = ::WiFi.RSSI(i);
+            result.Channel = static_cast<uint8_t>(::WiFi.channel(i));
+            result.Security = ConvertSecurity(::WiFi.encryptionType(i));
+            result.Hidden = result.SSID.empty();
+            uint8_t* bssid = ::WiFi.BSSID(i);
+            if (bssid != nullptr) std::copy(bssid, bssid + 6, result.BSSID.Octets.begin());
+            results.push_back(std::move(result));
         }
         ::WiFi.scanDelete();
         _scanRunning = false;
         _state.Scan = ScanState::Complete;
         ++_state.Revision;
+        if (completedScan != nullptr) *completedScan = std::move(results);
     }
 
-    static void BuildNetworkEvents(const WiFiRuntimeState& before, const WiFiRuntimeState& after, std::vector<WiFiPlatformEvent>& events) {
+    void BuildNetworkEvents(const WiFiRuntimeState& before, const WiFiRuntimeState& after, std::vector<WiFiPlatformEvent>& events) {
         const bool hadIP = !IsZero(before.Client.Network.Address);
         const bool hasIP = !IsZero(after.Client.Network.Address);
-        if (!hadIP && hasIP) events.push_back({WiFiPlatformEventKind::ClientIPAddressAcquired, {}, after.Client.Network});
-        else if (hadIP && !hasIP) events.push_back({WiFiPlatformEventKind::ClientIPAddressLost, {}, {}});
+        if (!hadIP && hasIP) {
+            WiFiPlatformEvent event; event.Kind = WiFiPlatformEventKind::ClientIPAddressAcquired; event.Network = after.Client.Network; events.push_back(event);
+        } else if (hadIP && !hasIP) {
+            WiFiPlatformEvent event; event.Kind = WiFiPlatformEventKind::ClientIPAddressLost; events.push_back(event);
+        }
     }
 
     void BuildStationEvents(std::vector<WiFiPlatformEvent>& events) {
-        std::vector<MacAddress> current;
-        if (UsesAP(_configuration.Mode)) {
-            wifi_sta_list_t stations{};
-            if (esp_wifi_ap_get_sta_list(&stations) == ESP_OK) {
-                current.reserve(stations.num);
-                for (int index = 0; index < stations.num; ++index) {
-                    MacAddress mac;
-                    for (std::size_t octet = 0; octet < 6; ++octet) mac.Octets[octet] = stations.sta[index].mac[octet];
-                    current.push_back(mac);
-                }
+        if (!UsesAP(_configuration.Mode)) return;
+        wifi_sta_list_t current{};
+        if (esp_wifi_ap_get_sta_list(&current) != ESP_OK) return;
+        std::vector<MacAddress> stations;
+        stations.reserve(current.num);
+        for (int i = 0; i < current.num; ++i) {
+            MacAddress mac;
+            std::copy(current.sta[i].mac, current.sta[i].mac + 6, mac.Octets.begin());
+            stations.push_back(mac);
+            if (std::find(_knownStations.begin(), _knownStations.end(), mac) == _knownStations.end()) {
+                WiFiPlatformEvent event; event.Kind = WiFiPlatformEventKind::AccessPointStationConnected; event.Station = mac; events.push_back(event);
             }
         }
-        for (const auto& station : current) if (std::find(_knownStations.begin(), _knownStations.end(), station) == _knownStations.end()) events.push_back({WiFiPlatformEventKind::AccessPointStationConnected, station, {}});
-        for (const auto& station : _knownStations) if (std::find(current.begin(), current.end(), station) == current.end()) events.push_back({WiFiPlatformEventKind::AccessPointStationDisconnected, station, {}});
-        _knownStations = std::move(current);
+        for (const auto& known : _knownStations) {
+            if (std::find(stations.begin(), stations.end(), known) == stations.end()) {
+                WiFiPlatformEvent event; event.Kind = WiFiPlatformEventKind::AccessPointStationDisconnected; event.Station = known; events.push_back(event);
+            }
+        }
+        _knownStations = std::move(stations);
     }
 
-    static NetworkSecurity TranslateSecurity(wifi_auth_mode_t value) {
-        switch (value) {
+    static NetworkSecurity ConvertSecurity(wifi_auth_mode_t mode) {
+        switch (mode) {
             case WIFI_AUTH_OPEN: return NetworkSecurity::Open;
             case WIFI_AUTH_WEP: return NetworkSecurity::WEP;
             case WIFI_AUTH_WPA_PSK: return NetworkSecurity::WPA;
@@ -415,10 +415,11 @@ private:
     }
 
     static bool StateChanged(const WiFiRuntimeState& a, const WiFiRuntimeState& b) {
-        return a.Mode != b.Mode || a.Client.State != b.Client.State || a.Client.SSID != b.Client.SSID ||
-            a.Client.RSSI != b.Client.RSSI || a.Client.Channel != b.Client.Channel ||
-            a.Client.Network.Address != b.Client.Network.Address || a.Client.ReconnectAttempt != b.Client.ReconnectAttempt ||
-            a.AccessPoint.State != b.AccessPoint.State || a.AccessPoint.ConnectedStations != b.AccessPoint.ConnectedStations ||
+        return a.Mode != b.Mode ||
+            a.Client.State != b.Client.State || a.Client.SSID != b.Client.SSID || a.Client.RSSI != b.Client.RSSI ||
+            a.Client.Channel != b.Client.Channel || a.Client.Network.Address != b.Client.Network.Address || a.Client.ReconnectAttempt != b.Client.ReconnectAttempt ||
+            a.AccessPoint.State != b.AccessPoint.State || a.AccessPoint.SSID != b.AccessPoint.SSID ||
+            a.AccessPoint.Channel != b.AccessPoint.Channel || a.AccessPoint.ConnectedStations != b.AccessPoint.ConnectedStations ||
             a.AccessPoint.Network.Address != b.AccessPoint.Network.Address || a.Scan != b.Scan;
     }
 
@@ -426,8 +427,8 @@ private:
     WiFiRuntimeState _state{};
     ClientNetworkProfile _activeProfile{};
     bool _hasActiveProfile = false;
-    bool _scanRunning = false;
     bool _manualDisconnect = false;
+    bool _scanRunning = false;
     uint32_t _clientAttemptStartedMilliseconds = 0;
     uint32_t _nextReconnectMilliseconds = 0;
     uint32_t _reconnectAttempts = 0;
