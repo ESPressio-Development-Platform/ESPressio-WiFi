@@ -139,6 +139,13 @@ remembered networks exist
                          +---- periodic scan/retry
                          |
                          +---- Client connects ------> stop AP -> STA-only
+                                                       |
+                                                       +---- later Client loss
+                                                               |
+                                                               v
+                                                         STA-only retry
+                                                               |
+                                                               +---- timeout -> AP+STA fallback again
 ```
 
 If there are **no remembered networks at all**, the fallback AP is started immediately because there is nothing useful for STA to attempt.
@@ -231,12 +238,49 @@ wifi client networks add "New-Site-WiFi" "new-site-password" 500
 wifi config save
 ```
 
-Fallback timing can also be changed through Commands:
+Fallback timing and explicit retry are also available through Commands:
 
 ```text
+wifi ap-until-client status
+wifi ap-until-client retry-now
 wifi ap-until-client fallback-timeout 30000
 wifi ap-until-client retry-interval 30000
 ```
+
+`retry-now` is useful after an external provisioning/control workflow has changed surrounding network conditions or when an operator explicitly wants to retry without waiting for the periodic retry interval.
+
+### Observing the `APUntilClient` lifecycle
+
+Consumers do not need to infer fallback state from separate AP and Client transitions. `WiFiRuntimeState::APUntilClient` exposes a dedicated lifecycle snapshot with `Inactive`, `SeekingClient`, `FallbackAccessPoint`, and `ClientConnected` states, plus the current fallback deadline and next retry time.
+
+For a direct synchronous callback:
+
+```cpp
+wifi.OnAPUntilClientStateChanged([](
+    const APUntilClientRuntimeState& before,
+    const APUntilClientRuntimeState& after
+) {
+    Serial.printf(
+        "APUntilClient state %u -> %u, fallback AP=%s\n",
+        static_cast<unsigned>(before.State),
+        static_cast<unsigned>(after.State),
+        after.FallbackAccessPointActive ? "active" : "inactive"
+    );
+});
+```
+
+Observer-based consumers can override the equivalent callback:
+
+```cpp
+void OnAPUntilClientStateChanged(
+    const APUntilClientRuntimeState& before,
+    const APUntilClientRuntimeState& after
+) override {
+    // React synchronously to the WiFi lifecycle transition.
+}
+```
+
+When the optional Event integration is used, `WiFiEventBridge` registers itself as a WiFi Observer and translates this callback into a Serializable `WiFiAPUntilClientStateChangedEvent`. Asynchronous Event subscribers can therefore react to fallback activation, Client acquisition, or recovery transitions without holding a reference to `WiFiManager`.
 
 ### `APUntilClient` vs `AccessPointClient`
 
@@ -373,6 +417,8 @@ wifi client networks add "Studio" "studio-password" 200
 wifi client networks priority "Studio" 400
 wifi client networks remove "Old-Network"
 
+wifi ap-until-client status
+wifi ap-until-client retry-now
 wifi ap-until-client fallback-timeout 30000
 wifi ap-until-client retry-interval 30000
 
