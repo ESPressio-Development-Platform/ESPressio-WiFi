@@ -57,7 +57,6 @@ private:
         void Mode(WiFiMode before, WiFiMode after) { Notify([&](IWiFiObserver* o){ o->OnWiFiModeChanged(before, after); }); }
         void Client(const ClientRuntimeState& before, const ClientRuntimeState& after) { Notify([&](IWiFiObserver* o){ o->OnClientStateChanged(before, after); }); }
         void AccessPoint(const AccessPointRuntimeState& before, const AccessPointRuntimeState& after) { Notify([&](IWiFiObserver* o){ o->OnAccessPointStateChanged(before, after); }); }
-        void Provisioning(const ProvisioningRuntimeState& before, const ProvisioningRuntimeState& after) { Notify([&](IWiFiObserver* o){ o->OnProvisioningStateChanged(before, after); }); }
         void ScanState(ScanState before, ScanState after) { Notify([&](IWiFiObserver* o){ o->OnScanStateChanged(before, after); }); }
         void ScanComplete(const std::vector<ScanResult>& results) { Notify([&](IWiFiObserver* o){ o->OnScanCompleted(results); }); }
         void APStationConnected(const MacAddress& mac) { Notify([&](IWiFiObserver* o){ o->OnAccessPointStationConnected(mac); }); }
@@ -74,7 +73,6 @@ public:
     using ModeCallback = std::function<void(WiFiMode, WiFiMode)>;
     using ClientCallback = std::function<void(const ClientRuntimeState&, const ClientRuntimeState&)>;
     using AccessPointCallback = std::function<void(const AccessPointRuntimeState&, const AccessPointRuntimeState&)>;
-    using ProvisioningCallback = std::function<void(const ProvisioningRuntimeState&, const ProvisioningRuntimeState&)>;
     using ScanStateCallback = std::function<void(ScanState, ScanState)>;
     using ScanCallback = std::function<void(const std::vector<ScanResult>&)>;
     using StationCallback = std::function<void(const MacAddress&)>;
@@ -104,7 +102,6 @@ public:
         std::lock_guard<std::mutex> lock(_mutex);
         auto state = _state;
         state.Client.Selection = _selectionState;
-        state.Provisioning = _provisioningState;
         return state;
     }
 
@@ -179,34 +176,18 @@ public:
         if (status != WiFiStatus::Success) return status;
 
         bool scanOnStartup = false;
-        bool provisioning = false;
-        bool hasRememberedNetworks = false;
         {
             std::lock_guard<std::mutex> lock(_mutex);
             _configuration = std::move(configuration);
             _eligibleCandidates.clear();
             _nextCandidateIndex = 0;
             _selectionState = {};
-            _provisioningState = {};
-            provisioning = _configuration.Mode == WiFiMode::Provisioning;
-            hasRememberedNetworks = !_configuration.Client.Networks.empty();
-            if (provisioning) {
-                _provisioningState.State = ProvisioningState::AccessPointAvailable;
-                _provisioningState.AccessPointRequired = true;
-                _provisioningState.FallbackTimeoutMilliseconds =
-                    _configuration.Provisioning.AccessPointFallbackTimeoutMilliseconds;
-            }
             scanOnStartup = UsesClient(_configuration.Mode) && _configuration.Client.Enabled &&
-                hasRememberedNetworks && _configuration.Client.Selection.AutomaticSelection &&
+                !_configuration.Client.Networks.empty() && _configuration.Client.Selection.AutomaticSelection &&
                 _configuration.Client.Selection.ScanOnStartup;
         }
 
-        if (scanOnStartup) {
-            (void)Scan();
-        } else if (provisioning && !hasRememberedNetworks) {
-            SetProvisioningState(ProvisioningState::AccessPointAvailable, true, 0);
-        }
-
+        if (scanOnStartup) (void)Scan();
         SignalWork();
         return status;
     }
@@ -221,54 +202,38 @@ public:
     WiFiStatus Scan() {
         const auto r = WithPlatform([&](){ return _platform.StartScan(); });
         bool selectionScan = false;
-        bool provisioning = false;
-        bool apRequired = false;
-        uint64_t graceStarted = 0;
         if (r == WiFiStatus::Success) {
             std::lock_guard<std::mutex> lock(_mutex);
             selectionScan = UsesClient(_configuration.Mode) && _configuration.Client.Enabled &&
                 _configuration.Client.Selection.AutomaticSelection && !_configuration.Client.Networks.empty() &&
                 _state.Client.State != ClientState::Connected;
-            provisioning = _configuration.Mode == WiFiMode::Provisioning;
-            apRequired = _provisioningState.AccessPointRequired;
-            graceStarted = _provisioningState.GracePeriodStartedMilliseconds;
         }
         if (selectionScan) SetSelectionState(ClientNetworkSelectionState::Scanning);
-        if (selectionScan && provisioning && graceStarted == 0) {
-            SetProvisioningState(ProvisioningState::ConnectingKnownNetwork, apRequired, 0);
-        }
         SignalWork();
         return r;
     }
 
     bool AddOrUpdateClientNetwork(ClientNetworkProfile profile) {
         if (profile.SSID.empty()) return false;
-        bool triggerProvisioningScan = false;
         {
             std::lock_guard<std::mutex> lock(_mutex);
             auto it = std::find_if(_configuration.Client.Networks.begin(), _configuration.Client.Networks.end(), [&](const ClientNetworkProfile& existing){ return existing.SSID == profile.SSID; });
             if (it == _configuration.Client.Networks.end()) _configuration.Client.Networks.push_back(std::move(profile));
             else *it = std::move(profile);
-            triggerProvisioningScan = _configuration.Mode == WiFiMode::Provisioning &&
-                _configuration.Client.Enabled && _configuration.Client.Selection.AutomaticSelection;
         }
-        if (triggerProvisioningScan) (void)Scan();
         SignalWork();
         return true;
     }
 
     bool RemoveClientNetwork(const std::string& ssid) {
         bool removed = false;
-        bool provisioningNowEmpty = false;
         {
             std::lock_guard<std::mutex> lock(_mutex);
             auto& networks = _configuration.Client.Networks;
             const auto oldSize = networks.size();
             networks.erase(std::remove_if(networks.begin(), networks.end(), [&](const ClientNetworkProfile& p){ return p.SSID == ssid; }), networks.end());
             removed = networks.size() != oldSize;
-            provisioningNowEmpty = removed && _configuration.Mode == WiFiMode::Provisioning && networks.empty();
         }
-        if (provisioningNowEmpty) EnsureProvisioningAccessPoint(ProvisioningState::AccessPointAvailable);
         if (removed) SignalWork();
         return removed;
     }
@@ -288,7 +253,6 @@ public:
     void OnModeChanged(ModeCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _modeCallback = std::move(cb); }
     void OnClientStateChanged(ClientCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _clientCallback = std::move(cb); }
     void OnAccessPointStateChanged(AccessPointCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _apCallback = std::move(cb); }
-    void OnProvisioningStateChanged(ProvisioningCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _provisioningCallback = std::move(cb); }
     void OnScanStateChanged(ScanStateCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _scanStateCallback = std::move(cb); }
     void OnScanCompleted(ScanCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _scanCallback = std::move(cb); }
     void OnAccessPointStationConnected(StationCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _stationConnected = std::move(cb); }
@@ -317,9 +281,7 @@ public:
             std::lock_guard<std::mutex> lock(_mutex);
             before = _state;
             before.Client.Selection = _selectionState;
-            before.Provisioning = _provisioningState;
             next.Client.Selection = _selectionState;
-            next.Provisioning = _provisioningState;
             scanCompleted = before.Scan != ScanState::Complete && next.Scan == ScanState::Complete;
             _state = next;
             if (scanCompleted) _lastScanResults = scan;
@@ -336,7 +298,6 @@ public:
 
         for (const auto& event : events) NotifyPlatformEvent(event);
         HandleConnectionProgress(before.Client.State, next.Client.State);
-        HandleProvisioningTimeout();
         return WiFiStatus::Success;
     }
 
@@ -344,9 +305,7 @@ public:
 
 private:
     static bool UsesClient(WiFiMode mode) {
-        return mode == WiFiMode::Client ||
-            mode == WiFiMode::AccessPointClient ||
-            mode == WiFiMode::Provisioning;
+        return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient;
     }
 
     uint64_t NowMilliseconds() const { return _clock(); }
@@ -388,62 +347,6 @@ private:
         }
     }
 
-    void SetProvisioningState(
-        ProvisioningState state,
-        bool accessPointRequired,
-        uint64_t graceStarted
-    ) {
-        ProvisioningRuntimeState before;
-        ProvisioningRuntimeState after;
-        {
-            std::lock_guard<std::mutex> lock(_mutex);
-            before = _provisioningState;
-            _provisioningState.State = state;
-            _provisioningState.AccessPointRequired = accessPointRequired;
-            _provisioningState.GracePeriodStartedMilliseconds = graceStarted;
-            _provisioningState.FallbackTimeoutMilliseconds =
-                _configuration.Provisioning.AccessPointFallbackTimeoutMilliseconds;
-            after = _provisioningState;
-        }
-        if (
-            before.State != after.State ||
-            before.AccessPointRequired != after.AccessPointRequired ||
-            before.GracePeriodStartedMilliseconds != after.GracePeriodStartedMilliseconds ||
-            before.FallbackTimeoutMilliseconds != after.FallbackTimeoutMilliseconds
-        ) {
-            auto callback = CopyCallback(_provisioningCallback);
-            if (callback) callback(before, after);
-            _observable->Provisioning(before, after);
-        }
-    }
-
-    void EnsureProvisioningAccessPoint(ProvisioningState state) {
-        bool shouldStart = false;
-        {
-            std::lock_guard<std::mutex> lock(_mutex);
-            if (_configuration.Mode != WiFiMode::Provisioning) return;
-            shouldStart = _state.AccessPoint.State != AccessPointState::Active &&
-                _state.AccessPoint.State != AccessPointState::Starting;
-        }
-        if (shouldStart) (void)WithPlatform([&](){ return _platform.StartAccessPoint(); });
-        SetProvisioningState(state, true, 0);
-        SignalWork();
-    }
-
-    void StopProvisioningAccessPointForClient() {
-        bool shouldStop = false;
-        {
-            std::lock_guard<std::mutex> lock(_mutex);
-            shouldStop = _configuration.Mode == WiFiMode::Provisioning &&
-                (_state.AccessPoint.State == AccessPointState::Active ||
-                 _state.AccessPoint.State == AccessPointState::Starting ||
-                 _provisioningState.AccessPointRequired);
-        }
-        if (shouldStop) (void)WithPlatform([&](){ return _platform.StopAccessPoint(); });
-        SetProvisioningState(ProvisioningState::ClientConnected, false, 0);
-        SignalWork();
-    }
-
     std::vector<ClientNetworkCandidate> BuildCandidates(const std::vector<ScanResult>& scan) const {
         WiFiConfiguration config;
         {
@@ -480,12 +383,10 @@ private:
     void HandleCompletedScan(const std::vector<ScanResult>& scan) {
         WiFiConfiguration config;
         ClientState clientState;
-        ProvisioningRuntimeState provisioningState;
         {
             std::lock_guard<std::mutex> lock(_mutex);
             config = _configuration;
             clientState = _state.Client.State;
-            provisioningState = _provisioningState;
         }
         if (!UsesClient(config.Mode) || !config.Client.Enabled || !config.Client.Selection.AutomaticSelection || config.Client.Networks.empty()) return;
         if (clientState == ClientState::Connected) return;
@@ -505,21 +406,6 @@ private:
             auto callback = CopyCallback(_noKnownNetworkCallback);
             if (callback) callback();
             _observable->NoKnownNetwork();
-
-            if (config.Mode == WiFiMode::Provisioning) {
-                if (provisioningState.GracePeriodStartedMilliseconds == 0) {
-                    SetProvisioningState(
-                        provisioningState.AccessPointRequired
-                            ? ProvisioningState::AccessPointAvailable
-                            : ProvisioningState::ConnectingKnownNetwork,
-                        provisioningState.AccessPointRequired,
-                        0
-                    );
-                }
-                // Provisioning stays discoverable/recoverable and keeps looking
-                // for remembered networks while its AP is available.
-                (void)Scan();
-            }
             return;
         }
         SetSelectionState(ClientNetworkSelectionState::Selecting);
@@ -530,9 +416,6 @@ private:
         ClientNetworkCandidate candidate;
         ClientNetworkProfile profile;
         bool available = false;
-        bool provisioning = false;
-        bool apRequired = false;
-        uint64_t graceStarted = 0;
         {
             std::lock_guard<std::mutex> lock(_mutex);
             if (_nextCandidateIndex < _eligibleCandidates.size()) {
@@ -545,9 +428,6 @@ private:
                     available = true;
                 }
             }
-            provisioning = _configuration.Mode == WiFiMode::Provisioning;
-            apRequired = _provisioningState.AccessPointRequired;
-            graceStarted = _provisioningState.GracePeriodStartedMilliseconds;
         }
         if (!available) {
             SetSelectionState(ClientNetworkSelectionState::Exhausted);
@@ -557,13 +437,6 @@ private:
         if (callback) callback(candidate);
         _observable->Selected(candidate);
         SetSelectionState(ClientNetworkSelectionState::Connecting);
-        if (provisioning) {
-            SetProvisioningState(
-                graceStarted != 0 ? ProvisioningState::ClientGracePeriod : ProvisioningState::ConnectingKnownNetwork,
-                apRequired,
-                graceStarted
-            );
-        }
         const auto result = WithPlatform([&]() { return _platform.ConnectClient(profile); });
         SignalWork();
         return result;
@@ -571,27 +444,15 @@ private:
 
     void HandleConnectionProgress(ClientState before, ClientState after) {
         WiFiConfiguration config;
-        ProvisioningRuntimeState provisioningState;
         {
             std::lock_guard<std::mutex> lock(_mutex);
             config = _configuration;
-            provisioningState = _provisioningState;
         }
         if (!config.Client.Selection.AutomaticSelection || config.Client.Networks.empty()) return;
 
         if (after == ClientState::Connected) {
             SetSelectionState(ClientNetworkSelectionState::Connected);
-            if (config.Mode == WiFiMode::Provisioning) StopProvisioningAccessPointForClient();
             return;
-        }
-
-        if (
-            config.Mode == WiFiMode::Provisioning &&
-            before == ClientState::Connected &&
-            after != ClientState::Connected
-        ) {
-            const uint64_t now = NowMilliseconds();
-            SetProvisioningState(ProvisioningState::ClientGracePeriod, false, now);
         }
 
         if (after == ClientState::Failed && before != ClientState::Failed && config.Client.Selection.TryNextOnFailure) {
@@ -600,42 +461,6 @@ private:
         }
         if (after == ClientState::Disconnected && before != ClientState::Disconnected && config.Client.Selection.ScanOnDisconnect) {
             (void)Scan();
-        }
-    }
-
-    void HandleProvisioningTimeout() {
-        WiFiConfiguration config;
-        ProvisioningRuntimeState provisioningState;
-        ClientState clientState;
-        {
-            std::lock_guard<std::mutex> lock(_mutex);
-            config = _configuration;
-            provisioningState = _provisioningState;
-            clientState = _state.Client.State;
-        }
-
-        if (config.Mode != WiFiMode::Provisioning) return;
-
-        if (config.Client.Networks.empty()) {
-            EnsureProvisioningAccessPoint(ProvisioningState::AccessPointAvailable);
-            return;
-        }
-
-        if (clientState == ClientState::Connected) return;
-        if (provisioningState.AccessPointRequired) return;
-        if (provisioningState.GracePeriodStartedMilliseconds == 0) return;
-
-        const uint64_t elapsed = NowMilliseconds() - provisioningState.GracePeriodStartedMilliseconds;
-        if (elapsed >= config.Provisioning.AccessPointFallbackTimeoutMilliseconds) {
-            bool shouldStart = false;
-            {
-                std::lock_guard<std::mutex> lock(_mutex);
-                shouldStart = _state.AccessPoint.State != AccessPointState::Active &&
-                    _state.AccessPoint.State != AccessPointState::Starting;
-            }
-            if (shouldStart) (void)WithPlatform([&](){ return _platform.StartAccessPoint(); });
-            SetProvisioningState(ProvisioningState::AccessPointFallback, true, 0);
-            SignalWork();
         }
     }
 
@@ -688,7 +513,6 @@ private:
     WiFiConfiguration _configuration{};
     WiFiRuntimeState _state{};
     ClientNetworkSelectionRuntimeState _selectionState{};
-    ProvisioningRuntimeState _provisioningState{};
     std::vector<ScanResult> _lastScanResults;
     std::vector<ClientNetworkCandidate> _eligibleCandidates;
     std::size_t _nextCandidateIndex = 0;
@@ -697,7 +521,6 @@ private:
     ModeCallback _modeCallback;
     ClientCallback _clientCallback;
     AccessPointCallback _apCallback;
-    ProvisioningCallback _provisioningCallback;
     ScanStateCallback _scanStateCallback;
     ScanCallback _scanCallback;
     StationCallback _stationConnected;
