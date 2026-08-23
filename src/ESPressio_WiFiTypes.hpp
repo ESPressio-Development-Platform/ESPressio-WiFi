@@ -9,21 +9,13 @@
 
 namespace ESPressio::WiFi {
 
-enum class WiFiMode : uint8_t { Disabled, Client, AccessPoint, AccessPointClient, Provisioning };
+enum class WiFiMode : uint8_t { Disabled, Client, AccessPoint, AccessPointClient };
 enum class ClientState : uint8_t { Disabled, Idle, Connecting, Connected, Reconnecting, Disconnecting, Disconnected, Failed };
 enum class AccessPointState : uint8_t { Disabled, Starting, Active, Failed };
 enum class ScanState : uint8_t { Idle, Scanning, Complete, Failed };
 enum class NetworkSecurity : uint8_t { Open, WEP, WPA, WPA2, WPA_WPA2, WPA3, WPA2_WPA3, Unknown };
 enum class AddressMode : uint8_t { DHCP, Static };
 enum class ClientNetworkSelectionState : uint8_t { Idle, Scanning, Selecting, Connecting, Connected, NoKnownNetworkAvailable, Exhausted };
-enum class ProvisioningState : uint8_t {
-    Inactive,
-    AccessPointAvailable,
-    ConnectingKnownNetwork,
-    ClientConnected,
-    ClientGracePeriod,
-    AccessPointFallback
-};
 
 struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     ESPRESSIO_SERIALIZABLE_TYPE(IPv4Address)
@@ -118,18 +110,10 @@ struct AccessPointRuntimeState {
     uint16_t ConnectedStations=0;
 };
 
-struct ProvisioningRuntimeState {
-    ProvisioningState State = ProvisioningState::Inactive;
-    uint64_t GracePeriodStartedMilliseconds = 0;
-    uint32_t FallbackTimeoutMilliseconds = 0;
-    bool AccessPointRequired = false;
-};
-
 struct WiFiRuntimeState {
     WiFiMode Mode=WiFiMode::Disabled;
     ClientRuntimeState Client{};
     AccessPointRuntimeState AccessPoint{};
-    ProvisioningRuntimeState Provisioning{};
     ScanState Scan=ScanState::Idle;
     uint64_t Revision=0;
 };
@@ -141,8 +125,7 @@ ESPRESSIO_ENUM_MAPPING(
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::Disabled, "disabled"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::Client, "client"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::AccessPoint, "access-point"),
-    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::AccessPointClient, "access-point-client"),
-    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::Provisioning, "provisioning")
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::AccessPointClient, "access-point-client")
 )
 
 ESPRESSIO_ENUM_MAPPING(
@@ -200,14 +183,4 @@ ESPRESSIO_ENUM_MAPPING(
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::Connected, "connected"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::NoKnownNetworkAvailable, "no-known-network-available"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::Exhausted, "exhausted")
-)
-
-ESPRESSIO_ENUM_MAPPING(
-    ESPressio::WiFi::ProvisioningState,
-    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ProvisioningState::Inactive, "inactive"),
-    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ProvisioningState::AccessPointAvailable, "access-point-available"),
-    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ProvisioningState::ConnectingKnownNetwork, "connecting-known-network"),
-    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ProvisioningState::ClientConnected, "client-connected"),
-    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ProvisioningState::ClientGracePeriod, "client-grace-period"),
-    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ProvisioningState::AccessPointFallback, "access-point-fallback")
 )
