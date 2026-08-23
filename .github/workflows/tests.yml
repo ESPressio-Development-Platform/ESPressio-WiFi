@@ -50,6 +50,10 @@ jobs:
           EOF
           cat > project/consumer/src/main.cpp <<'EOF'
           #include <Arduino.h>
+          // Arduino-ESP32 3.x WiFi depends on the bundled Network library. Including
+          // Network.h explicitly keeps PlatformIO's LDF aware of that framework edge
+          // when this synthetic consumer pulls WiFi transitively via ESPressio-WiFi.
+          #include <Network.h>
           #include <ESPressio_ESP32WiFi.hpp>
           #include <ESPressio_WiFiWorker.hpp>
           #include <ESPressio_WiFiPersistence.hpp>
