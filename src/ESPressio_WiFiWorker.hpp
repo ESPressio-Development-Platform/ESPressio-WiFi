@@ -11,7 +11,6 @@ namespace ESPressio::WiFi {
 
 struct WiFiWorkerConfiguration {
     uint32_t IterationPeriodMilliseconds = 50;
-    uint32_t DesiredExecutionBudgetMilliseconds = 5;
 };
 
 class WiFiWorker final
@@ -59,12 +58,13 @@ protected:
 
 private:
     void ApplyRuntimeConfiguration() {
-        SetIterationPeriod(
-            Units::MilliSeconds<uint32_t>(_configuration.IterationPeriodMilliseconds)
+        const auto period = Units::MilliSeconds<uint32_t>(
+            _configuration.IterationPeriodMilliseconds
         );
-        SetDesiredIterationPeriod(
-            Units::MilliSeconds<uint32_t>(_configuration.DesiredExecutionBudgetMilliseconds)
-        );
+        SetIterationPeriod(period);
+        // PrecisionThread constrains desired period to at least the scheduling
+        // period. Keep both aligned and let Threads own overrun diagnostics.
+        SetDesiredIterationPeriod(period);
     }
 
     WiFiManager& _manager;
