@@ -1,9 +1,9 @@
-set(COMPONENT_SRCDIRS
-    "src"
-)
+cmake_minimum_required(VERSION 3.16)
 
-set(COMPONENT_ADD_INCLUDEDIRS
-    "src"
-)
-
-register_component()
+if(ESP_PLATFORM)
+    idf_component_register(INCLUDE_DIRS "src")
+else()
+    project(ESPressioWiFi LANGUAGES CXX)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
