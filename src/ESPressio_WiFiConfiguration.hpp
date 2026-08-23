@@ -53,10 +53,13 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(2)
 
     bool Enabled = false;
+
+    // 0.1.x single-network fields remain source- and persistence-compatible.
     std::string SSID;
     std::string Password;
     AddressMode Addressing = AddressMode::DHCP;
     NetworkAddress StaticNetwork{};
+
     std::vector<ClientNetworkProfile> Networks;
     ClientNetworkSelectionConfiguration Selection{};
 
@@ -78,10 +81,12 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
 struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(DHCPServerConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+
     bool Enabled = true;
     IPv4Address LeaseStart{192,168,4,2};
     IPv4Address LeaseEnd{192,168,4,100};
     uint32_t LeaseDurationSeconds = 7200;
+
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
         ESPRESSIO_PROPERTY("enabled", Enabled),
         ESPRESSIO_PROPERTY("leaseStart", LeaseStart),
@@ -93,6 +98,7 @@ struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConf
 struct AccessPointConfiguration final : Serializable::Serializable<AccessPointConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(AccessPointConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+
     bool Enabled = true;
     std::string SSID;
     std::string Password;
@@ -123,12 +129,14 @@ struct AccessPointConfiguration final : Serializable::Serializable<AccessPointCo
 struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
     ESPRESSIO_SERIALIZABLE_TYPE(ReconnectPolicy)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+
     bool Enabled = true;
     uint32_t InitialDelayMilliseconds = 1000;
     uint32_t MaximumDelayMilliseconds = 30000;
     float BackoffMultiplier = 2.0f;
     uint32_t MaximumAttempts = 0;
     uint32_t ConnectionTimeoutMilliseconds = 15000;
+
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
         ESPRESSIO_PROPERTY("enabled", Enabled),
         ESPRESSIO_PROPERTY("initialDelayMilliseconds", InitialDelayMilliseconds),
