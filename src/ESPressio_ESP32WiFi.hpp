@@ -23,6 +23,7 @@ public:
         _manualDisconnect = false;
         _reconnectAttempts = 0;
         _nextReconnectMilliseconds = 0;
+        _hasActiveProfile = false;
 
         wifi_mode_t mode = WIFI_MODE_NULL;
         switch (configuration.Mode) {
@@ -34,11 +35,16 @@ public:
         if (!::WiFi.mode(mode)) return WiFiStatus::PlatformError;
         if (!configuration.Hostname.empty()) (void)::WiFi.setHostname(configuration.Hostname.c_str());
 
-        if (UsesClient(configuration.Mode) && !ConfigureClientAddress()) return WiFiStatus::PlatformError;
+        const bool automaticProfiles = UsesClient(configuration.Mode) && configuration.Client.Enabled &&
+            configuration.Client.Selection.AutomaticSelection && !configuration.Client.Networks.empty();
+        if (UsesClient(configuration.Mode) && !automaticProfiles && !ConfigureClientAddressLegacy()) return WiFiStatus::PlatformError;
         if (UsesAP(configuration.Mode) && !ConfigureAccessPoint()) return WiFiStatus::PlatformError;
         ApplyRadioSettings();
 
-        if (UsesClient(configuration.Mode) && configuration.Client.Enabled && !configuration.Client.SSID.empty()) {
+        // 0.2.0 remembered-network selection is manager-owned. The platform only
+        // auto-connects the legacy single-network configuration path.
+        if (UsesClient(configuration.Mode) && configuration.Client.Enabled &&
+            !automaticProfiles && !configuration.Client.SSID.empty()) {
             BeginClient(false);
         }
 
@@ -60,6 +66,22 @@ public:
         if (!UsesClient(_configuration.Mode) || !_configuration.Client.Enabled || _configuration.Client.SSID.empty()) {
             return WiFiStatus::InvalidConfiguration;
         }
+        _hasActiveProfile = false;
+        if (!ConfigureClientAddressLegacy()) return WiFiStatus::PlatformError;
+        _manualDisconnect = false;
+        _reconnectAttempts = 0;
+        BeginClient(false);
+        return WiFiStatus::Success;
+    }
+
+    WiFiStatus ConnectClient(const ClientNetworkProfile& profile) override {
+        if (!UsesClient(_configuration.Mode) || !_configuration.Client.Enabled || !profile.Enabled || profile.SSID.empty()) {
+            return WiFiStatus::InvalidConfiguration;
+        }
+        if (!ValidateProfile(profile)) return WiFiStatus::InvalidConfiguration;
+        _activeProfile = profile;
+        _hasActiveProfile = true;
+        if (!ConfigureClientAddress(profile.Addressing, profile.StaticNetwork)) return WiFiStatus::PlatformError;
         _manualDisconnect = false;
         _reconnectAttempts = 0;
         BeginClient(false);
@@ -132,22 +154,22 @@ public:
     }
 
 private:
-    static bool UsesAP(WiFiMode mode) {
-        return mode == WiFiMode::AccessPoint || mode == WiFiMode::AccessPointClient;
-    }
-
-    static bool UsesClient(WiFiMode mode) {
-        return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient;
-    }
+    static bool UsesAP(WiFiMode mode) { return mode == WiFiMode::AccessPoint || mode == WiFiMode::AccessPointClient; }
+    static bool UsesClient(WiFiMode mode) { return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient; }
 
     static bool ValidateCredential(const std::string& password) {
         return password.empty() || (password.size() >= 8 && password.size() <= 63);
     }
 
+    static bool ValidateProfile(const ClientNetworkProfile& profile) {
+        return profile.SSID.size() <= 32 && ValidateCredential(profile.Password);
+    }
+
     static bool Validate(const WiFiConfiguration& configuration) {
         if (configuration.Hostname.size() > 32) return false;
         if (configuration.AccessPoint.SSID.size() > 32 || configuration.Client.SSID.size() > 32) return false;
-        if (!ValidateCredential(configuration.AccessPoint.Password)) return false;
+        if (!ValidateCredential(configuration.AccessPoint.Password) || !ValidateCredential(configuration.Client.Password)) return false;
+        for (const auto& profile : configuration.Client.Networks) if (!ValidateProfile(profile)) return false;
         if (configuration.AccessPoint.Channel < 1 || configuration.AccessPoint.Channel > 14) return false;
         if (configuration.AccessPoint.MaximumClients == 0) return false;
         if (configuration.Reconnect.BackoffMultiplier < 1.0f) return false;
@@ -155,42 +177,24 @@ private:
         return true;
     }
 
-    static IPv4Address Convert(const IPAddress& value) {
-        return IPv4Address(value[0], value[1], value[2], value[3]);
+    static IPv4Address Convert(const IPAddress& value) { return IPv4Address(value[0], value[1], value[2], value[3]); }
+    static IPAddress Convert(const IPv4Address& value) { return IPAddress(value.Octets[0], value.Octets[1], value.Octets[2], value.Octets[3]); }
+    static bool IsZero(const IPv4Address& value) { return value.Octets[0] == 0 && value.Octets[1] == 0 && value.Octets[2] == 0 && value.Octets[3] == 0; }
+    static bool TimeReached(uint32_t now, uint32_t target) { return static_cast<int32_t>(now - target) >= 0; }
+
+    bool ConfigureClientAddress(AddressMode mode, const NetworkAddress& network) {
+        if (mode == AddressMode::DHCP) return ::WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+        return ::WiFi.config(Convert(network.Address), Convert(network.Gateway), Convert(network.SubnetMask), Convert(network.PrimaryDNS), Convert(network.SecondaryDNS));
     }
 
-    static IPAddress Convert(const IPv4Address& value) {
-        return IPAddress(value.Octets[0], value.Octets[1], value.Octets[2], value.Octets[3]);
-    }
-
-    static bool IsZero(const IPv4Address& value) {
-        return value.Octets[0] == 0 && value.Octets[1] == 0 && value.Octets[2] == 0 && value.Octets[3] == 0;
-    }
-
-    static bool TimeReached(uint32_t now, uint32_t target) {
-        return static_cast<int32_t>(now - target) >= 0;
-    }
-
-    bool ConfigureClientAddress() {
-        if (_configuration.Client.Addressing == AddressMode::DHCP) {
-            return ::WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
-        }
-        const auto& network = _configuration.Client.StaticNetwork;
-        return ::WiFi.config(
-            Convert(network.Address),
-            Convert(network.Gateway),
-            Convert(network.SubnetMask),
-            Convert(network.PrimaryDNS),
-            Convert(network.SecondaryDNS)
-        );
+    bool ConfigureClientAddressLegacy() {
+        return ConfigureClientAddress(_configuration.Client.Addressing, _configuration.Client.StaticNetwork);
     }
 
     bool ConfigureAccessPoint() {
         const auto& ap = _configuration.AccessPoint;
         if (!ap.Enabled || ap.SSID.empty()) return false;
-        if (!::WiFi.softAPConfig(Convert(ap.Network.Address), Convert(ap.Network.Gateway), Convert(ap.Network.SubnetMask))) {
-            return false;
-        }
+        if (!::WiFi.softAPConfig(Convert(ap.Network.Address), Convert(ap.Network.Gateway), Convert(ap.Network.SubnetMask))) return false;
         const char* password = ap.Password.empty() ? nullptr : ap.Password.c_str();
         if (!::WiFi.softAP(ap.SSID.c_str(), password, ap.Channel, ap.Hidden, ap.MaximumClients)) return false;
         return ConfigureDHCPServer(ap.DHCP);
@@ -199,47 +203,19 @@ private:
     static bool ConfigureDHCPServer(const DHCPServerConfiguration& configuration) {
         esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
         if (netif == nullptr) return false;
-
         (void)esp_netif_dhcps_stop(netif);
         if (!configuration.Enabled) return true;
-
 #if defined(ESP_NETIF_REQUESTED_IP_ADDRESS)
         dhcps_lease_t lease{};
         lease.enable = true;
-        IP4_ADDR(
-            &lease.start_ip,
-            configuration.LeaseStart.Octets[0], configuration.LeaseStart.Octets[1],
-            configuration.LeaseStart.Octets[2], configuration.LeaseStart.Octets[3]
-        );
-        IP4_ADDR(
-            &lease.end_ip,
-            configuration.LeaseEnd.Octets[0], configuration.LeaseEnd.Octets[1],
-            configuration.LeaseEnd.Octets[2], configuration.LeaseEnd.Octets[3]
-        );
-        if (esp_netif_dhcps_option(
-                netif,
-                ESP_NETIF_OP_SET,
-                ESP_NETIF_REQUESTED_IP_ADDRESS,
-                &lease,
-                sizeof(lease)
-            ) != ESP_OK) {
-            return false;
-        }
+        IP4_ADDR(&lease.start_ip, configuration.LeaseStart.Octets[0], configuration.LeaseStart.Octets[1], configuration.LeaseStart.Octets[2], configuration.LeaseStart.Octets[3]);
+        IP4_ADDR(&lease.end_ip, configuration.LeaseEnd.Octets[0], configuration.LeaseEnd.Octets[1], configuration.LeaseEnd.Octets[2], configuration.LeaseEnd.Octets[3]);
+        if (esp_netif_dhcps_option(netif, ESP_NETIF_OP_SET, ESP_NETIF_REQUESTED_IP_ADDRESS, &lease, sizeof(lease)) != ESP_OK) return false;
 #endif
-
 #if defined(ESP_NETIF_IP_ADDRESS_LEASE_TIME)
         uint32_t leaseMinutes = std::max<uint32_t>(1, configuration.LeaseDurationSeconds / 60);
-        if (esp_netif_dhcps_option(
-                netif,
-                ESP_NETIF_OP_SET,
-                ESP_NETIF_IP_ADDRESS_LEASE_TIME,
-                &leaseMinutes,
-                sizeof(leaseMinutes)
-            ) != ESP_OK) {
-            return false;
-        }
+        if (esp_netif_dhcps_option(netif, ESP_NETIF_OP_SET, ESP_NETIF_IP_ADDRESS_LEASE_TIME, &leaseMinutes, sizeof(leaseMinutes)) != ESP_OK) return false;
 #endif
-
         const esp_err_t started = esp_netif_dhcps_start(netif);
 #if defined(ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED)
         return started == ESP_OK || started == ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED;
@@ -256,15 +232,22 @@ private:
         (void)esp_wifi_set_ps(_configuration.PowerSave ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE);
     }
 
+    const std::string& ActiveSSID() const { return _hasActiveProfile ? _activeProfile.SSID : _configuration.Client.SSID; }
+    const std::string& ActivePassword() const { return _hasActiveProfile ? _activeProfile.Password : _configuration.Client.Password; }
+
     void BeginClient(bool reconnect) {
+        const auto& ssid = ActiveSSID();
+        const auto& password = ActivePassword();
+        if (ssid.empty()) {
+            _state.Client.State = ClientState::Failed;
+            ++_state.Revision;
+            return;
+        }
         _state.Client.State = reconnect ? ClientState::Reconnecting : ClientState::Connecting;
         _state.Client.ReconnectAttempt = _reconnectAttempts;
         _clientAttemptStartedMilliseconds = millis();
         ++_state.Revision;
-        ::WiFi.begin(
-            _configuration.Client.SSID.c_str(),
-            _configuration.Client.Password.empty() ? nullptr : _configuration.Client.Password.c_str()
-        );
+        ::WiFi.begin(ssid.c_str(), password.empty() ? nullptr : password.c_str());
     }
 
     void ScheduleReconnect() {
@@ -273,26 +256,15 @@ private:
             ++_state.Revision;
             return;
         }
-
-        if (_configuration.Reconnect.MaximumAttempts != 0 &&
-            _reconnectAttempts >= _configuration.Reconnect.MaximumAttempts) {
+        if (_configuration.Reconnect.MaximumAttempts != 0 && _reconnectAttempts >= _configuration.Reconnect.MaximumAttempts) {
             _state.Client.State = ClientState::Failed;
             ++_state.Revision;
             return;
         }
-
         ++_reconnectAttempts;
         double delay = static_cast<double>(_configuration.Reconnect.InitialDelayMilliseconds);
-        if (_reconnectAttempts > 1) {
-            delay *= std::pow(
-                static_cast<double>(_configuration.Reconnect.BackoffMultiplier),
-                static_cast<double>(_reconnectAttempts - 1)
-            );
-        }
-        const uint32_t boundedDelay = static_cast<uint32_t>(std::min<double>(
-            delay,
-            static_cast<double>(_configuration.Reconnect.MaximumDelayMilliseconds)
-        ));
+        if (_reconnectAttempts > 1) delay *= std::pow(static_cast<double>(_configuration.Reconnect.BackoffMultiplier), static_cast<double>(_reconnectAttempts - 1));
+        const uint32_t boundedDelay = static_cast<uint32_t>(std::min<double>(delay, static_cast<double>(_configuration.Reconnect.MaximumDelayMilliseconds)));
         _nextReconnectMilliseconds = millis() + boundedDelay;
         _state.Client.State = ClientState::Reconnecting;
         _state.Client.ReconnectAttempt = _reconnectAttempts;
@@ -301,30 +273,20 @@ private:
 
     void PollReconnect() {
         if (!UsesClient(_configuration.Mode) || !_configuration.Client.Enabled || _manualDisconnect) return;
-
+        if (ActiveSSID().empty()) return; // manager may still be scanning/selecting a profile
         const auto status = ::WiFi.status();
         if (status == WL_CONNECTED) {
             _reconnectAttempts = 0;
             _nextReconnectMilliseconds = 0;
             return;
         }
-
-        if (_state.Client.State == ClientState::Connected) {
-            ScheduleReconnect();
-            return;
-        }
-
+        if (_state.Client.State == ClientState::Connected) { ScheduleReconnect(); return; }
         if (_state.Client.State == ClientState::Connecting) {
             const uint32_t elapsed = millis() - _clientAttemptStartedMilliseconds;
-            if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL ||
-                elapsed >= _configuration.Reconnect.ConnectionTimeoutMilliseconds) {
-                ScheduleReconnect();
-            }
+            if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL || elapsed >= _configuration.Reconnect.ConnectionTimeoutMilliseconds) ScheduleReconnect();
             return;
         }
-
-        if (_state.Client.State == ClientState::Reconnecting &&
-            _nextReconnectMilliseconds != 0 && TimeReached(millis(), _nextReconnectMilliseconds)) {
+        if (_state.Client.State == ClientState::Reconnecting && _nextReconnectMilliseconds != 0 && TimeReached(millis(), _nextReconnectMilliseconds)) {
             _nextReconnectMilliseconds = 0;
             BeginClient(true);
         }
@@ -333,15 +295,11 @@ private:
     void RefreshState() {
         WiFiRuntimeState next = _state;
         next.Mode = _configuration.Mode;
-
         if (UsesClient(_configuration.Mode)) {
             const auto status = ::WiFi.status();
-            if (status == WL_CONNECTED) {
-                next.Client.State = ClientState::Connected;
-            } else if (_manualDisconnect) {
-                next.Client.State = ClientState::Disconnected;
-            }
-            next.Client.SSID = std::string(::WiFi.SSID().c_str());
+            if (status == WL_CONNECTED) next.Client.State = ClientState::Connected;
+            else if (_manualDisconnect) next.Client.State = ClientState::Disconnected;
+            next.Client.SSID = status == WL_CONNECTED ? std::string(::WiFi.SSID().c_str()) : ActiveSSID();
             next.Client.RSSI = status == WL_CONNECTED ? ::WiFi.RSSI() : 0;
             next.Client.Channel = status == WL_CONNECTED ? static_cast<uint8_t>(::WiFi.channel()) : 0;
             next.Client.Network.Address = Convert(::WiFi.localIP());
@@ -353,20 +311,14 @@ private:
         } else {
             next.Client = ClientRuntimeState{};
         }
-
         if (UsesAP(_configuration.Mode)) {
-            next.AccessPoint.State = ::WiFi.softAPIP() == IPAddress(0,0,0,0)
-                ? AccessPointState::Starting
-                : AccessPointState::Active;
+            next.AccessPoint.State = ::WiFi.softAPIP() == IPAddress(0,0,0,0) ? AccessPointState::Starting : AccessPointState::Active;
             next.AccessPoint.SSID = _configuration.AccessPoint.SSID;
             next.AccessPoint.Channel = _configuration.AccessPoint.Channel;
             next.AccessPoint.Network = _configuration.AccessPoint.Network;
             next.AccessPoint.Network.Address = Convert(::WiFi.softAPIP());
             next.AccessPoint.ConnectedStations = static_cast<uint16_t>(::WiFi.softAPgetStationNum());
-        } else {
-            next.AccessPoint = AccessPointRuntimeState{};
-        }
-
+        } else next.AccessPoint = AccessPointRuntimeState{};
         if (StateChanged(next, _state)) {
             next.Revision = _state.Revision + 1;
             _state = std::move(next);
@@ -383,7 +335,6 @@ private:
             ++_state.Revision;
             return;
         }
-
         if (completedScan != nullptr) {
             completedScan->clear();
             completedScan->reserve(static_cast<std::size_t>(count));
@@ -393,32 +344,22 @@ private:
                 result.RSSI = ::WiFi.RSSI(index);
                 result.Channel = static_cast<uint8_t>(::WiFi.channel(index));
                 uint8_t* bssid = ::WiFi.BSSID(index);
-                if (bssid != nullptr) {
-                    for (std::size_t octet = 0; octet < 6; ++octet) result.BSSID.Octets[octet] = bssid[octet];
-                }
+                if (bssid != nullptr) for (std::size_t octet = 0; octet < 6; ++octet) result.BSSID.Octets[octet] = bssid[octet];
                 result.Security = TranslateSecurity(::WiFi.encryptionType(index));
                 completedScan->push_back(std::move(result));
             }
         }
-
         ::WiFi.scanDelete();
         _scanRunning = false;
         _state.Scan = ScanState::Complete;
         ++_state.Revision;
     }
 
-    static void BuildNetworkEvents(
-        const WiFiRuntimeState& before,
-        const WiFiRuntimeState& after,
-        std::vector<WiFiPlatformEvent>& events
-    ) {
+    static void BuildNetworkEvents(const WiFiRuntimeState& before, const WiFiRuntimeState& after, std::vector<WiFiPlatformEvent>& events) {
         const bool hadIP = !IsZero(before.Client.Network.Address);
         const bool hasIP = !IsZero(after.Client.Network.Address);
-        if (!hadIP && hasIP) {
-            events.push_back({WiFiPlatformEventKind::ClientIPAddressAcquired, {}, after.Client.Network});
-        } else if (hadIP && !hasIP) {
-            events.push_back({WiFiPlatformEventKind::ClientIPAddressLost, {}, {}});
-        }
+        if (!hadIP && hasIP) events.push_back({WiFiPlatformEventKind::ClientIPAddressAcquired, {}, after.Client.Network});
+        else if (hadIP && !hasIP) events.push_back({WiFiPlatformEventKind::ClientIPAddressLost, {}, {}});
     }
 
     void BuildStationEvents(std::vector<WiFiPlatformEvent>& events) {
@@ -429,24 +370,13 @@ private:
                 current.reserve(stations.num);
                 for (int index = 0; index < stations.num; ++index) {
                     MacAddress mac;
-                    for (std::size_t octet = 0; octet < 6; ++octet) {
-                        mac.Octets[octet] = stations.sta[index].mac[octet];
-                    }
+                    for (std::size_t octet = 0; octet < 6; ++octet) mac.Octets[octet] = stations.sta[index].mac[octet];
                     current.push_back(mac);
                 }
             }
         }
-
-        for (const auto& station : current) {
-            if (std::find(_knownStations.begin(), _knownStations.end(), station) == _knownStations.end()) {
-                events.push_back({WiFiPlatformEventKind::AccessPointStationConnected, station, {}});
-            }
-        }
-        for (const auto& station : _knownStations) {
-            if (std::find(current.begin(), current.end(), station) == current.end()) {
-                events.push_back({WiFiPlatformEventKind::AccessPointStationDisconnected, station, {}});
-            }
-        }
+        for (const auto& station : current) if (std::find(_knownStations.begin(), _knownStations.end(), station) == _knownStations.end()) events.push_back({WiFiPlatformEventKind::AccessPointStationConnected, station, {}});
+        for (const auto& station : _knownStations) if (std::find(current.begin(), current.end(), station) == current.end()) events.push_back({WiFiPlatformEventKind::AccessPointStationDisconnected, station, {}});
         _knownStations = std::move(current);
     }
 
@@ -468,21 +398,17 @@ private:
     }
 
     static bool StateChanged(const WiFiRuntimeState& a, const WiFiRuntimeState& b) {
-        return a.Mode != b.Mode ||
-            a.Client.State != b.Client.State ||
-            a.Client.SSID != b.Client.SSID ||
-            a.Client.RSSI != b.Client.RSSI ||
-            a.Client.Channel != b.Client.Channel ||
-            a.Client.Network.Address != b.Client.Network.Address ||
-            a.Client.ReconnectAttempt != b.Client.ReconnectAttempt ||
-            a.AccessPoint.State != b.AccessPoint.State ||
-            a.AccessPoint.ConnectedStations != b.AccessPoint.ConnectedStations ||
-            a.AccessPoint.Network.Address != b.AccessPoint.Network.Address ||
-            a.Scan != b.Scan;
+        return a.Mode != b.Mode || a.Client.State != b.Client.State || a.Client.SSID != b.Client.SSID ||
+            a.Client.RSSI != b.Client.RSSI || a.Client.Channel != b.Client.Channel ||
+            a.Client.Network.Address != b.Client.Network.Address || a.Client.ReconnectAttempt != b.Client.ReconnectAttempt ||
+            a.AccessPoint.State != b.AccessPoint.State || a.AccessPoint.ConnectedStations != b.AccessPoint.ConnectedStations ||
+            a.AccessPoint.Network.Address != b.AccessPoint.Network.Address || a.Scan != b.Scan;
     }
 
     WiFiConfiguration _configuration{};
     WiFiRuntimeState _state{};
+    ClientNetworkProfile _activeProfile{};
+    bool _hasActiveProfile = false;
     bool _scanRunning = false;
     bool _manualDisconnect = false;
     uint32_t _clientAttemptStartedMilliseconds = 0;
