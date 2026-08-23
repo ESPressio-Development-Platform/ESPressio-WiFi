@@ -1,26 +1,42 @@
 # ESPressio WiFi
 
-Platform-neutral WiFi lifecycle, configuration and diagnostics for ESP32 applications.
+Platform-neutral, event-driven WiFi lifecycle and configuration for ESP32 applications.
 
 ## Version — 0.1.0
 
-0.1.0 is the first real ESPressio WiFi API. The old manifest-only `1.0.0` value was never a released implementation and is intentionally superseded.
+0.1.0 is the first functional release. The historical manifest-only `1.0.0` value never represented a released implementation and creates no compatibility obligation.
 
-## The shortest possible setup
+## What ESPressio WiFi owns
 
-WiFi defaults to Access Point mode. Supply the credentials, apply the configuration, then poll the manager from your application loop or worker thread:
+- Access Point, Client and AP+Client operating modes.
+- Independent AP and Client runtime state machines.
+- ESPressio-owned IPv4/MAC/network/security/scan types; no Arduino/ESP-IDF types in public APIs.
+- Always-Serializable WiFi configuration.
+- DHCP/static client addressing and AP DHCP-server configuration data.
+- asynchronous scanning.
+- direct callbacks and ESPressio Observable notifications.
+- an explicit ESP32 implementation behind `IWiFiPlatform`.
+- optional Persistence, protected Persistence/Security, Event and Command integrations.
+
+HTTP, WebSocket, browser UI and other Web concerns deliberately belong elsewhere.
+
+## Minimal Access Point
+
+WiFi defaults to Access Point mode:
 
 ```cpp
 #include <ESPressio_WiFi.hpp>
 #include <ESPressio_ESP32WiFi.hpp>
 
-ESPressio::WiFi::ESP32WiFiPlatform platform;
-ESPressio::WiFi::WiFiManager wifi(platform);
+using namespace ESPressio::WiFi;
+
+ESP32WiFiPlatform platform;
+WiFiManager wifi(platform);
 
 void setup() {
-    ESPressio::WiFi::WiFiConfiguration config;
-    config.AccessPoint.SSID = "my-device";
-    config.AccessPoint.Password = "change-me-now";
+    WiFiConfiguration config;
+    config.AccessPoint.SSID = "ESPressio-Device";
+    config.AccessPoint.Password = "change-me";
     wifi.Configure(config);
 }
 
@@ -29,23 +45,19 @@ void loop() {
 }
 ```
 
-The public manager and configuration APIs expose only ESPressio types. `IPAddress`, `wifi_event_t`, Arduino status values and ESP-IDF structures belong inside the ESP32 adapter.
-
-## Client mode
+## Client and AP+Client modes
 
 ```cpp
 WiFiConfiguration config;
 config.Mode = WiFiMode::Client;
 config.Client.Enabled = true;
-config.Client.SSID = "office";
+config.Client.SSID = "Studio";
 config.Client.Password = "secret";
 wifi.Configure(config);
 wifi.ConnectClient();
 ```
 
-`ClientRuntimeState` independently reports `Idle`, `Connecting`, `Connected`, `Reconnecting` and `Failed`. AP state remains independently visible, which makes `AccessPointClient` mode unambiguous.
-
-## AP + Client
+For simultaneous AP and Client operation:
 
 ```cpp
 config.Mode = WiFiMode::AccessPointClient;
@@ -54,31 +66,137 @@ config.Client.Enabled = true;
 wifi.Configure(config);
 ```
 
-The composite `WiFiRuntimeState` contains both state machines and a monotonically increasing revision.
+`WiFiRuntimeState` then reports both independently, for example `AccessPoint.State == Active` while `Client.State == Connecting`.
 
-## Asynchronous scanning
+## DHCP and static addressing
+
+Client addressing defaults to DHCP. Static addressing is explicit and persistable:
+
+```cpp
+config.Client.Addressing = AddressMode::Static;
+config.Client.StaticNetwork.Address = IPv4Address(192, 168, 1, 50);
+config.Client.StaticNetwork.Gateway = IPv4Address(192, 168, 1, 1);
+config.Client.StaticNetwork.SubnetMask = IPv4Address(255, 255, 255, 0);
+config.Client.StaticNetwork.PrimaryDNS = IPv4Address(1, 1, 1, 1);
+```
+
+AP network and DHCP-server settings are separate:
+
+```cpp
+config.AccessPoint.Network.Address = IPv4Address(192, 168, 10, 1);
+config.AccessPoint.DHCP.Enabled = true;
+config.AccessPoint.DHCP.LeaseStart = IPv4Address(192, 168, 10, 10);
+config.AccessPoint.DHCP.LeaseEnd = IPv4Address(192, 168, 10, 100);
+config.AccessPoint.DHCP.LeaseDurationSeconds = 7200;
+```
+
+The ESP32 Arduino backend applies the addressing settings supported by the selected framework; the complete configuration remains persisted even when a particular backend cannot tune every DHCP-server detail directly.
+
+## Scanning
 
 ```cpp
 wifi.OnScanCompleted([](const std::vector<ScanResult>& networks) {
     for (const auto& network : networks) {
-        // SSID, ESPressio MacAddress, RSSI, channel, security, hidden
+        Serial.printf("%s RSSI=%d channel=%u\n",
+            network.SSID.c_str(), network.RSSI, network.Channel);
     }
 });
 
 wifi.Scan();
 ```
 
-Scanning never exposes Arduino scan-result types.
+Results contain only ESPressio types: SSID, BSSID, RSSI, channel and security mode.
 
-## DHCP and static addressing
+## Direct callbacks
 
-Client addressing defaults to DHCP. Set `Client.Addressing = AddressMode::Static` and populate `Client.StaticNetwork` for a static address, gateway, mask and DNS servers.
+AP and Client contexts remain deliberately separate:
 
-The AP owns an independent network configuration and DHCP-server switch. The default AP network is `192.168.4.1/24`.
+```cpp
+wifi.OnClientStateChanged([](const ClientRuntimeState& before,
+                             const ClientRuntimeState& after) {
+    // Client-only transition.
+});
+
+wifi.OnAccessPointStateChanged([](const AccessPointRuntimeState& before,
+                                  const AccessPointRuntimeState& after) {
+    // AP-only transition.
+});
+
+wifi.OnAccessPointStationConnected([](const MacAddress& station) {
+    // A station joined our AP.
+});
+```
+
+`OnModeChanged()` reports overall topology changes independently of either subsystem.
+
+## Observable notifications
+
+Implement `IWiFiObserver` and register it with the same manager:
+
+```cpp
+class Observer : public IWiFiObserver {
+public:
+    void OnClientStateChanged(
+        const ClientRuntimeState& before,
+        const ClientRuntimeState& after
+    ) override {
+        // ...
+    }
+};
+
+Observer observer;
+auto handle = wifi.RegisterObserver(&observer);
+```
+
+Observable notifications include mode, AP state, Client state, scan lifecycle/results, AP station joins/leaves, and Client IP acquisition/loss.
+
+## Optional Event bridge
+
+```cpp
+#include <ESPressio_WiFiEventBridge.hpp>
+
+ESPressio::Event::WiFiEventBridge bridge;
+bridge.Initialize(wifi);
+```
+
+The bridge converts Observable notifications into WiFi-owned ESPressio Event types. Event remains optional.
+
+## Optional Command handler
+
+```cpp
+#include <ESPressio_WiFiCommandHandler.hpp>
+
+WiFiCommandHandler commands;
+commands.Initialize(
+    ESPressio::Command::CommandRegistry::GetInstance(),
+    wifi
+);
+```
+
+This makes the same control surface usable from ESPressio Serial today and a future browser console later. Representative commands are:
+
+```text
+wifi status
+wifi mode ap
+wifi mode client
+wifi mode ap-client
+wifi scan
+wifi client connect
+wifi client disconnect
+wifi client ssid "Studio"
+wifi client password "secret"
+wifi ap start
+wifi ap stop
+wifi ap ssid "ESPressio-Lab"
+wifi ap password "secret"
+wifi ap channel 6
+```
+
+There is intentionally no command for reading a password back. Credentials may be set, never emitted.
 
 ## Persisting configuration
 
-Configuration is always an ESPressio Serializable model. Persistence is optional:
+Configuration is Serializable by design. Persistence remains opt-in and provider-neutral:
 
 ```cpp
 #include <ESPressio_WiFiPersistence.hpp>
@@ -87,54 +205,70 @@ WiFiConfigurationStore::Save(storage, "/wifi.espb", config);
 WiFiConfigurationStore::Load(storage, "/wifi.espb", config);
 ```
 
-The same helper accepts `IKeyValueStorage` for Preferences/NVS-style storage.
+The same helpers accept `IKeyValueStorage`, so Preferences/NVS works without WiFi knowing that NVS exists.
 
-### Protect credentials at rest
+## Protecting the complete configuration
 
-WiFi passwords are marked `Sensitive()` for redacted diagnostic serialization, but redaction is **not encryption**. For persisted credentials, protected persistence is strongly recommended:
+Passwords are marked Sensitive for redaction, but redaction is not encryption. For persisted credentials, authenticated protection is strongly recommended:
 
 ```cpp
 #include <ESPressio_WiFiPersistenceSecurity.hpp>
 
 Serializable::SerializationProtectionConfig protection;
 protection.Protector = &protector;
-protection.Context = "wifi-configuration";
+protection.Context = "ESPressio.WiFi.Configuration";
 
 ProtectedWiFiConfigurationStore::Save(
-    storage, "/wifi.esdp", config, protection
+    storage,
+    "/wifi.esdp",
+    config,
+    protection
 );
 ```
 
-This delegates authenticated protection to Serializable 0.11.x / Security 0.4.x through Persistence 0.3.x. WiFi never chooses a cipher or owns cryptographic key policy.
+Protection covers the entire serialized configuration, not just passwords. WiFi never chooses the cipher or owns key material; those responsibilities remain in ESPressio Security.
 
-## State callbacks
+## Compile-time extensible configuration
+
+Applications can persist WiFi settings together with application-specific settings without modifying ESPressio WiFi.
 
 ```cpp
-wifi.OnStateChanged([](const WiFiRuntimeState& before,
-                       const WiFiRuntimeState& after) {
-    // React synchronously to logical state changes.
-});
+#include <ESPressio_ExtensibleWiFiConfiguration.hpp>
+
+struct MyNetworkExtras final
+    : ESPressio::Serializable::Serializable<MyNetworkExtras> {
+    ESPRESSIO_SERIALIZABLE_TYPE(MyNetworkExtras)
+    uint16_t DiscoveryPort = 9000;
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("discoveryPort", DiscoveryPort)
+    )
+};
+
+using MyConfiguration = WiFiConfigurationWith<MyNetworkExtras>;
+
+ConfiguredWiFiManager<MyConfiguration> wifi(platform);
+MyConfiguration config;
+config.WiFi.AccessPoint.SSID = "Camera-Control";
+config.Extension.DiscoveryPort = 9100;
+wifi.Configure(config);
 ```
 
-Optional Observable/Event adapters can layer on this state model without changing the core platform contract.
+`WiFiConfigurationStore` and `ProtectedWiFiConfigurationStore` are templated, so the whole extended object can be persisted/protected as one document. The hardware implementation receives only the standard `config.WiFi` section.
 
-## Architecture
+## Dependency direction
 
 ```text
-application
-    |
-WiFiManager + WiFiConfiguration (Serializable)
-    |
-IWiFiPlatform                 optional integrations
-    |                         - - > Persistence 0.3.x
-ESP32WiFiPlatform             - - > Security via protected Persistence
-                              - - > Observable / Event / Command
+WiFi 0.1.0
+    -> Observable >= 3.0.2 < 4.0.0
+    -> Serializable >= 0.11.0 < 1.0.0
+
+optional
+    - - -> Persistence >= 0.3.0 < 1.0.0
+    - - -> Security >= 0.4.0 < 1.0.0 (through protected serialization)
+    - - -> Event >= 6.0.1 < 7.0.0
+    - - -> Command >= 1.0.1 < 2.0.0
 ```
 
-Web servers, HTTP, WebSockets, captive portals and browser UI are intentionally outside this library.
+Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
 
-## Dependency policy
-
-Serializable 0.11.x is the only foundational dependency because WiFi configuration is explicitly Serializable. Persistence, Security, Observable, Event and Command are opt-in integration surfaces.
-
-See `ESPRESSIO_DEPENDENCY_CHART.md` for the complete dependency position.
+See `ESPRESSIO_DEPENDENCY_CHART.md` and `CHANGELOG.md` for the coordinated platform position and release history.
