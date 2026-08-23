@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdio>
 #include <sstream>
 #include <string>
 #include <ESPressio_Command.hpp>
