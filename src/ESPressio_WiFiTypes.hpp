@@ -18,7 +18,6 @@ enum class AddressMode : uint8_t { DHCP, Static };
 struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     ESPRESSIO_SERIALIZABLE_TYPE(IPv4Address)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
-    ~IPv4Address() = default;
     std::array<uint8_t,4> Octets{};
     IPv4Address() = default;
     IPv4Address(uint8_t a,uint8_t b,uint8_t c,uint8_t d) : Octets{{a,b,c,d}} {}
@@ -28,8 +27,11 @@ struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     std::string ToString() const { return std::to_string(Octets[0])+"."+std::to_string(Octets[1])+"."+std::to_string(Octets[2])+"."+std::to_string(Octets[3]); }
 };
 
-struct MacAddress {
+struct MacAddress final : Serializable::Serializable<MacAddress> {
+    ESPRESSIO_SERIALIZABLE_TYPE(MacAddress)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
     std::array<uint8_t,6> Octets{};
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("octets", Octets))
     bool operator==(const MacAddress& other) const noexcept { return Octets==other.Octets; }
     bool operator!=(const MacAddress& other) const noexcept { return !(*this==other); }
 };
@@ -37,7 +39,6 @@ struct MacAddress {
 struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
     ESPRESSIO_SERIALIZABLE_TYPE(NetworkAddress)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
-    ~NetworkAddress() = default;
     IPv4Address Address{};
     IPv4Address Gateway{};
     IPv4Address SubnetMask{255,255,255,0};
@@ -65,6 +66,32 @@ ESPRESSIO_ENUM_MAPPING(
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::Client, "client"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::AccessPoint, "access-point"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::AccessPointClient, "access-point-client")
+)
+
+ESPRESSIO_ENUM_MAPPING(
+    ESPressio::WiFi::ClientState,
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Disabled, "disabled"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Idle, "idle"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Connecting, "connecting"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Connected, "connected"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Reconnecting, "reconnecting"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Failed, "failed")
+)
+
+ESPRESSIO_ENUM_MAPPING(
+    ESPressio::WiFi::AccessPointState,
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::AccessPointState::Disabled, "disabled"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::AccessPointState::Starting, "starting"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::AccessPointState::Active, "active"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::AccessPointState::Failed, "failed")
+)
+
+ESPRESSIO_ENUM_MAPPING(
+    ESPressio::WiFi::ScanState,
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ScanState::Idle, "idle"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ScanState::Scanning, "scanning"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ScanState::Complete, "complete"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ScanState::Failed, "failed")
 )
 
 ESPRESSIO_ENUM_MAPPING(
