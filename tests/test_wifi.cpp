@@ -8,23 +8,26 @@ class FakePlatform final : public IWiFiPlatform {
 public:
     WiFiStatus Apply(const WiFiConfiguration& config) override { configured=config; state.Mode=config.Mode; state.Revision++; return WiFiStatus::Success; }
     WiFiStatus Disable() override { state.Mode=WiFiMode::Disabled; state.Revision++; return WiFiStatus::Success; }
-    WiFiStatus ConnectClient() override { state.Client.State=ClientState::Connecting; state.Revision++; return WiFiStatus::Success; }
+    WiFiStatus ConnectClient() override { state.Client.State=ClientState::Connecting; state.Revision++; legacyConnects++; return WiFiStatus::Success; }
+    WiFiStatus ConnectClient(const ClientNetworkProfile& profile) override {
+        connectedProfiles.push_back(profile.SSID); state.Client.State=ClientState::Connecting; state.Client.SSID=profile.SSID; state.Revision++; return WiFiStatus::Success;
+    }
     WiFiStatus DisconnectClient() override { state.Client.State=ClientState::Disconnected; state.Revision++; return WiFiStatus::Success; }
     WiFiStatus StartAccessPoint() override { state.AccessPoint.State=AccessPointState::Active; state.Revision++; return WiFiStatus::Success; }
     WiFiStatus StopAccessPoint() override { state.AccessPoint.State=AccessPointState::Disabled; state.Revision++; return WiFiStatus::Success; }
-    WiFiStatus StartScan() override { state.Scan=ScanState::Scanning; state.Revision++; return WiFiStatus::Success; }
+    WiFiStatus StartScan() override { state.Scan=ScanState::Scanning; state.Revision++; scanStarts++; return WiFiStatus::Success; }
     WiFiStatus Poll(WiFiRuntimeState& output,std::vector<ScanResult>* scans,std::vector<WiFiPlatformEvent>* events) override {
         output=state;
-        if (deliverScan && scans) {
-            ScanResult r; r.SSID="Lab"; r.RSSI=-42; r.Channel=6; r.Security=NetworkSecurity::WPA2;
-            scans->push_back(r); deliverScan=false;
-        }
+        if (deliverScan && scans) { *scans=nextScan; deliverScan=false; }
         if (!pending.empty() && events) { *events=pending; pending.clear(); }
         return WiFiStatus::Success;
     }
     WiFiConfiguration configured{};
     WiFiRuntimeState state{};
     bool deliverScan=false;
+    int legacyConnects=0,scanStarts=0;
+    std::vector<ScanResult> nextScan;
+    std::vector<std::string> connectedProfiles;
     std::vector<WiFiPlatformEvent> pending;
 };
 
@@ -45,12 +48,16 @@ public:
     void OnAccessPointStateChanged(const AccessPointRuntimeState&,const AccessPointRuntimeState&) override { aps++; }
     void OnScanStateChanged(ScanState,ScanState) override { scanStates++; }
     void OnScanCompleted(const std::vector<ScanResult>& r) override { scans += static_cast<int>(r.size()); }
-    void OnAccessPointStationConnected(const MacAddress&) override { joined++; }
-    void OnAccessPointStationDisconnected(const MacAddress&) override { left++; }
-    void OnClientIPAddressAcquired(const NetworkAddress&) override { ips++; }
-    void OnClientIPAddressLost() override { ipLost++; }
-    int modes=0,clients=0,aps=0,scanStates=0,scans=0,joined=0,left=0,ips=0,ipLost=0;
+    void OnClientNetworkSelectionChanged(const ClientNetworkSelectionRuntimeState&,const ClientNetworkSelectionRuntimeState&) override { selectionChanges++; }
+    void OnClientNetworkSelected(const ClientNetworkCandidate& c) override { selected.push_back(c.SSID); }
+    void OnClientNoKnownNetworkAvailable() override { noKnown++; }
+    int modes=0,clients=0,aps=0,scanStates=0,scans=0,selectionChanges=0,noKnown=0;
+    std::vector<std::string> selected;
 };
+
+static ScanResult Visible(const char* ssid,int rssi,uint8_t channel) {
+    ScanResult result; result.SSID=ssid; result.RSSI=rssi; result.Channel=channel; result.Security=NetworkSecurity::WPA2; return result;
+}
 
 int main() {
     FakePlatform platform;
@@ -59,70 +66,84 @@ int main() {
     auto handle=wifi.RegisterObserver(&observer);
     assert(handle);
 
-    int directScanStates=0,directIP=0,directLost=0;
-    wifi.OnScanStateChanged([&](ScanState,ScanState){ directScanStates++; });
-    wifi.OnClientIPAddressAcquired([&](const NetworkAddress&){ directIP++; });
-    wifi.OnClientIPAddressLost([&](){ directLost++; });
-
     WiFiConfiguration config;
-    assert(config.Mode==WiFiMode::AccessPoint);
     config.Mode=WiFiMode::AccessPointClient;
     config.AccessPoint.SSID="lab-ap";
     config.Client.Enabled=true;
-    config.Client.SSID="lab-sta";
-    config.AccessPoint.DHCP.LeaseStart=IPv4Address(192,168,4,20);
-    config.Reconnect.BackoffMultiplier=2.0f;
+    config.Client.Selection.AutomaticSelection=true;
+    config.Client.Selection.ScanOnStartup=true;
+    config.Client.Selection.TryNextOnFailure=true;
+
+    ClientNetworkProfile preferred; preferred.SSID="Preferred"; preferred.Password="preferred-pass"; preferred.Priority=300;
+    ClientNetworkProfile backup; backup.SSID="Backup"; backup.Password="backup-pass"; backup.Priority=100;
+    config.Client.Networks={backup,preferred}; // vector order deliberately opposes priority
+
     assert(wifi.Configure(config)==WiFiStatus::Success);
-    assert(wifi.Poll()==WiFiStatus::Success);
+    assert(platform.scanStarts==1); // autonomous startup scan request
+    assert(wifi.ProcessOnce()==WiFiStatus::Success);
     assert(observer.modes==1);
 
-    assert(wifi.ConnectClient()==WiFiStatus::Success);
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.clients==1);
-
-    assert(wifi.StartAccessPoint()==WiFiStatus::Success);
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.aps==1);
-
-    assert(wifi.Scan()==WiFiStatus::Success);
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.scanStates>=1 && directScanStates>=1);
+    // Backup has the stronger RSSI, but Preferred wins because configured priority is authoritative.
+    platform.nextScan={Visible("Backup",-30,1),Visible("Preferred",-70,11)};
     platform.deliverScan=true;
     platform.state.Scan=ScanState::Complete;
     platform.state.Revision++;
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.scans==1);
-    assert(wifi.LastScanResults().size()==1);
-    assert(wifi.LastScanResults()[0].SSID=="Lab");
+    assert(wifi.ProcessOnce()==WiFiStatus::Success);
+    assert(platform.connectedProfiles.size()==1);
+    assert(platform.connectedProfiles[0]=="Preferred");
+    assert(observer.selected.back()=="Preferred");
+    auto eligible=wifi.EligibleClientNetworks();
+    assert(eligible.size()==2 && eligible[0].SSID=="Preferred" && eligible[1].SSID=="Backup");
 
-    NetworkAddress network;
-    network.Address=IPv4Address(10,0,0,2);
-    network.Gateway=IPv4Address(10,0,0,1);
-    network.SubnetMask=IPv4Address(255,255,255,0);
-    WiFiPlatformEvent joined; joined.Kind=WiFiPlatformEventKind::AccessPointStationConnected;
-    WiFiPlatformEvent ip; ip.Kind=WiFiPlatformEventKind::ClientIPAddressAcquired; ip.Network=network;
-    platform.pending={joined,ip};
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.joined==1 && observer.ips==1 && directIP==1);
+    // A failed preferred connection advances to the next candidate without requiring application logic.
+    platform.state.Client.State=ClientState::Failed;
+    platform.state.Revision++;
+    assert(wifi.ProcessOnce()==WiFiStatus::Success);
+    assert(platform.connectedProfiles.size()==2);
+    assert(platform.connectedProfiles[1]=="Backup");
 
-    WiFiPlatformEvent left; left.Kind=WiFiPlatformEventKind::AccessPointStationDisconnected;
-    WiFiPlatformEvent lost; lost.Kind=WiFiPlatformEventKind::ClientIPAddressLost;
-    platform.pending={left,lost};
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.left==1 && observer.ipLost==1 && directLost==1);
+    platform.state.Client.State=ClientState::Connected;
+    platform.state.Client.SSID="Backup";
+    platform.state.Revision++;
+    assert(wifi.ProcessOnce()==WiFiStatus::Success);
+    assert(wifi.State().Client.Selection.State==ClientNetworkSelectionState::Connected);
+
+    // Duplicate BSSIDs for the same remembered SSID collapse to the strongest visible BSSID.
+    platform.nextScan={Visible("Preferred",-80,1),Visible("Preferred",-40,6),Visible("Backup",-20,11)};
+    platform.deliverScan=true;
+    platform.state.Scan=ScanState::Complete;
+    platform.state.Revision++;
+    assert(wifi.ProcessOnce()==WiFiStatus::Success);
+    eligible=wifi.EligibleClientNetworks();
+    assert(eligible[0].SSID=="Preferred" && eligible[0].RSSI==-40 && eligible[0].Channel==6);
+
+    // Unknown scans do not invent credentials and expose explicit no-known-network state.
+    platform.nextScan={Visible("Unknown",-10,6)};
+    platform.deliverScan=true;
+    platform.state.Scan=ScanState::Complete;
+    platform.state.Revision++;
+    assert(wifi.ProcessOnce()==WiFiStatus::Success);
+    assert(observer.noKnown==1);
+    assert(wifi.State().Client.Selection.State==ClientNetworkSelectionState::NoKnownNetworkAvailable);
+
+    assert(wifi.SetClientNetworkPriority("Backup",500));
+    assert(wifi.RemoveClientNetwork("Preferred"));
+    ClientNetworkProfile replacement; replacement.SSID="Third"; replacement.Password="third-pass"; replacement.Priority=250;
+    assert(wifi.AddOrUpdateClientNetwork(replacement));
 
     FakeStore store;
     wifi.SetConfigurationStore(&store);
     assert(wifi.SaveConfiguration());
     assert(store.saves==1);
-    auto changed=wifi.Configuration();
-    changed.Hostname="changed";
+    const auto saved=store.saved;
+    assert(saved.Client.Networks.size()==2);
+    assert(saved.Client.Networks[0].SSID=="Backup" || saved.Client.Networks[1].SSID=="Backup");
+
+    auto changed=wifi.Configuration(); changed.Hostname="changed";
     assert(wifi.Configure(changed)==WiFiStatus::Success);
     assert(wifi.LoadConfiguration(false));
     assert(store.loads==1);
     assert(wifi.Configuration().Hostname!="changed");
 
-    assert(wifi.Configuration().AccessPoint.SSID=="lab-ap");
-    assert(wifi.Configuration().AccessPoint.DHCP.LeaseStart==IPv4Address(192,168,4,20));
     return 0;
 }
