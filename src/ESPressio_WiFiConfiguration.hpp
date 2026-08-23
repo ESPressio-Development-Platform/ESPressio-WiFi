@@ -11,6 +11,7 @@ namespace ESPressio::WiFi {
 struct ClientConfiguration final : Serializable::Serializable<ClientConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(ClientConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~ClientConfiguration() = default;
 
     bool Enabled = false;
     std::string SSID;
@@ -30,6 +31,7 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
 struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(DHCPServerConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~DHCPServerConfiguration() = default;
 
     bool Enabled = true;
     IPv4Address LeaseStart{192, 168, 4, 2};
@@ -47,6 +49,7 @@ struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConf
 struct AccessPointConfiguration final : Serializable::Serializable<AccessPointConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(AccessPointConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~AccessPointConfiguration() = default;
 
     bool Enabled = true;
     std::string SSID;
@@ -78,11 +81,12 @@ struct AccessPointConfiguration final : Serializable::Serializable<AccessPointCo
 struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
     ESPRESSIO_SERIALIZABLE_TYPE(ReconnectPolicy)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~ReconnectPolicy() = default;
 
     bool Enabled = true;
     uint32_t InitialDelayMilliseconds = 1000;
     uint32_t MaximumDelayMilliseconds = 30000;
-    uint32_t MaximumAttempts = 0; // zero = unlimited
+    uint32_t MaximumAttempts = 0;
 
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
         ESPRESSIO_PROPERTY("enabled", Enabled),
@@ -95,6 +99,7 @@ struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
 struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~WiFiConfiguration() = default;
 
     WiFiMode Mode = WiFiMode::AccessPoint;
     std::string Hostname = "espressio";
