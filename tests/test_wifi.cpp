@@ -40,13 +40,15 @@ class Observer final : public IWiFiObserver {
 public:
     void OnWiFiModeChanged(WiFiMode,WiFiMode) override { modes++; }
     void OnClientStateChanged(const ClientRuntimeState&,const ClientRuntimeState&) override { clients++; }
+    void OnAPUntilClientStateChanged(const APUntilClientRuntimeState&,const APUntilClientRuntimeState& after) override { apUntilClientChanges++; apUntilClientStates.push_back(after.State); }
     void OnScanCompleted(const std::vector<ScanResult>& r) override { scanCompletions++; scans += static_cast<int>(r.size()); }
     void OnClientNetworkSelectionChanged(const ClientNetworkSelectionRuntimeState&,const ClientNetworkSelectionRuntimeState&) override { selectionChanges++; }
     void OnClientNetworkSelected(const ClientNetworkCandidate& c) override { selected.push_back(c.SSID); selectedRSSI.push_back(c.RSSI); }
     void OnClientNoKnownNetworkAvailable() override { noKnown++; }
-    int modes=0,clients=0,scanCompletions=0,scans=0,selectionChanges=0,noKnown=0;
+    int modes=0,clients=0,scanCompletions=0,scans=0,selectionChanges=0,noKnown=0,apUntilClientChanges=0;
     std::vector<std::string> selected;
     std::vector<int32_t> selectedRSSI;
+    std::vector<APUntilClientState> apUntilClientStates;
 };
 
 static ScanResult Visible(const char* ssid,int rssi,uint8_t channel) {
@@ -144,24 +146,42 @@ int main() {
         assert(wifi.Configuration().Hostname!="changed");
     }
 
-    // #15: no remembered networks means immediate AP fallback.
+    // #15: no remembered networks means immediate AP fallback and emits both
+    // the direct callback and Observer lifecycle notification.
     {
         uint64_t now=1000;
         FakePlatform platform;
         WiFiManager wifi(platform,[&](){return now;});
+        Observer observer;
+        auto handle=wifi.RegisterObserver(&observer); assert(handle);
+        int directChanges=0;
+        APUntilClientState directState=APUntilClientState::Inactive;
+        wifi.OnAPUntilClientStateChanged([&](const APUntilClientRuntimeState&,const APUntilClientRuntimeState& after){directChanges++;directState=after.State;});
         auto config=AutomaticConfig(WiFiMode::APUntilClient);
         config.APUntilClient.FallbackTimeoutMilliseconds=5000;
         config.APUntilClient.RetryScanIntervalMilliseconds=2000;
         assert(wifi.Configure(config)==WiFiStatus::Success);
         assert(platform.apStarts==1);
         assert(platform.scanStarts==0);
+        assert(wifi.State().APUntilClient.State==APUntilClientState::FallbackAccessPoint);
+        assert(wifi.State().APUntilClient.FallbackAccessPointActive);
+        assert(observer.apUntilClientChanges>=1);
+        assert(observer.apUntilClientStates.back()==APUntilClientState::FallbackAccessPoint);
+        assert(directChanges>=1 && directState==APUntilClientState::FallbackAccessPoint);
+        assert(wifi.RetryKnownNetworksNow()==WiFiStatus::InvalidConfiguration);
     }
 
-    // #15: remembered networks start STA-first; fallback waits for timeout.
+    // #15: remembered networks start STA-first; fallback waits for timeout,
+    // retries while AP+STA, then returns to ClientConnected and can recover again
+    // after a later Client loss.
     {
         uint64_t now=1000;
         FakePlatform platform;
         WiFiManager wifi(platform,[&](){return now;});
+        Observer observer;
+        auto handle=wifi.RegisterObserver(&observer); assert(handle);
+        int directChanges=0;
+        wifi.OnAPUntilClientStateChanged([&](const APUntilClientRuntimeState&,const APUntilClientRuntimeState&){directChanges++;});
         auto config=AutomaticConfig(WiFiMode::APUntilClient);
         config.APUntilClient.FallbackTimeoutMilliseconds=5000;
         config.APUntilClient.RetryScanIntervalMilliseconds=2000;
@@ -169,6 +189,8 @@ int main() {
         assert(wifi.Configure(config)==WiFiStatus::Success);
         assert(platform.scanStarts==1);
         assert(platform.apStarts==0);
+        assert(wifi.State().APUntilClient.State==APUntilClientState::SeekingClient);
+        assert(wifi.State().APUntilClient.FallbackDeadlineMilliseconds==6000);
 
         platform.nextScan.clear(); platform.deliverScan=true; platform.state.Scan=ScanState::Complete; platform.state.Revision++;
         assert(wifi.ProcessOnce()==WiFiStatus::Success);
@@ -176,22 +198,42 @@ int main() {
 
         now=5999; assert(wifi.ProcessOnce()==WiFiStatus::Success); assert(platform.apStarts==0);
         now=6000; assert(wifi.ProcessOnce()==WiFiStatus::Success); assert(platform.apStarts==1);
+        assert(wifi.State().APUntilClient.State==APUntilClientState::FallbackAccessPoint);
+        assert(wifi.State().APUntilClient.NextRetryMilliseconds==8000);
 
-        // While fallback AP is active, periodic retry scans continue.
         const int scansAtFallback=platform.scanStarts;
         now=7999; assert(wifi.ProcessOnce()==WiFiStatus::Success); assert(platform.scanStarts==scansAtFallback);
         now=8000; assert(wifi.ProcessOnce()==WiFiStatus::Success); assert(platform.scanStarts==scansAtFallback+1);
+        assert(wifi.State().APUntilClient.NextRetryMilliseconds==10000);
 
-        // Adding credentials/profile during fallback triggers an immediate scan attempt.
+        const int scansBeforeExplicitRetry=platform.scanStarts;
+        assert(wifi.RetryKnownNetworksNow()==WiFiStatus::Success);
+        assert(platform.scanStarts==scansBeforeExplicitRetry+1);
+
         ClientNetworkProfile newKnown; newKnown.SSID="NewKnown"; newKnown.Password="password123"; newKnown.Priority=500;
         const int scansBeforeAdd=platform.scanStarts;
         assert(wifi.AddOrUpdateClientNetwork(newKnown));
         assert(platform.scanStarts==scansBeforeAdd+1);
 
-        // Successful Client connectivity shuts down the fallback AP.
         platform.state.Client.State=ClientState::Connected; platform.state.Client.SSID="NewKnown"; platform.state.Revision++;
         assert(wifi.ProcessOnce()==WiFiStatus::Success);
         assert(platform.apStops==1);
+        assert(wifi.State().APUntilClient.State==APUntilClientState::ClientConnected);
+        assert(!wifi.State().APUntilClient.FallbackAccessPointActive);
+
+        // A later loss of the established Client must arm a fresh fallback window.
+        now=12000;
+        platform.state.Client.State=ClientState::Disconnected; platform.state.Revision++;
+        const int scansBeforeLoss=platform.scanStarts;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(wifi.State().APUntilClient.State==APUntilClientState::SeekingClient);
+        assert(wifi.State().APUntilClient.FallbackDeadlineMilliseconds==17000);
+        assert(platform.scanStarts>=scansBeforeLoss+1);
+        now=16999; assert(wifi.ProcessOnce()==WiFiStatus::Success); assert(platform.apStarts==1);
+        now=17000; assert(wifi.ProcessOnce()==WiFiStatus::Success); assert(platform.apStarts==2);
+
+        assert(observer.apUntilClientChanges>=4);
+        assert(directChanges==observer.apUntilClientChanges);
     }
 
     // #15: persistent AP+Client semantics remain unchanged.
@@ -207,6 +249,7 @@ int main() {
         platform.state.Revision++;
         assert(wifi.ProcessOnce()==WiFiStatus::Success);
         assert(platform.apStops==0);
+        assert(wifi.State().APUntilClient.State==APUntilClientState::Inactive);
     }
 
     return 0;
