@@ -54,8 +54,9 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
 
     bool Enabled = false;
 
-    // Legacy/single-network fields remain available for source compatibility.
-    // When Networks is non-empty the remembered-network collection is authoritative.
+    // 0.1.x single-network fields remain source- and persistence-compatible.
+    // New 0.2.x applications should prefer Networks. When Networks is non-empty,
+    // automatic remembered-network selection is authoritative.
     std::string SSID;
     std::string Password;
     AddressMode Addressing = AddressMode::DHCP;
@@ -73,6 +74,16 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
         ESPRESSIO_PROPERTY("networks", Networks),
         ESPRESSIO_PROPERTY("selection", Selection)
     )
+
+    static bool Migrate(
+        Serializable::SerializationNode&,
+        uint32_t fromVersion,
+        uint32_t toVersion
+    ) {
+        // v2 only adds optional/defaulted remembered-network fields. Existing
+        // 0.1.x SSID/password/addressing values remain intact as the legacy path.
+        return fromVersion == 1 && toVersion == 2;
+    }
 };
 
 struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConfiguration> {
@@ -165,6 +176,14 @@ struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
         ESPRESSIO_PROPERTY("txPowerDbm", TxPowerDbm),
         ESPRESSIO_PROPERTY("powerSave", PowerSave)
     )
+
+    static bool Migrate(
+        Serializable::SerializationNode&,
+        uint32_t fromVersion,
+        uint32_t toVersion
+    ) {
+        return fromVersion == 1 && toVersion == 2;
+    }
 };
 
 } // namespace ESPressio::WiFi
