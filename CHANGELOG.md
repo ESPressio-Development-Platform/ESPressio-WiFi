@@ -32,7 +32,9 @@
 
 ### Changed
 
-- WiFi now depends on ESPressio Threads >= 3.1.5 < 4.0.0 because autonomous runtime servicing is core functionality.
+- WiFi now requires ESPressio Serializable `>=0.11.2 <1.0.0` and ESPressio Threads `>=3.1.6 <4.0.0` for the corrected Serializable 0.11.2 cascade generation.
+- Optional integration validation now targets Persistence `>=0.3.1 <1.0.0`, Security `>=0.4.1 <1.0.0`, Event `>=6.0.2 <7.0.0`, and Command `>=1.0.2 <2.0.0`.
+- ESP32 integration CI validates the exact released coordinated generation including Units 0.2.6 and Timing 2.2.7.
 - Normal applications no longer call `wifi.Poll()` from `loop()`; `WiFiWorker` services the manager automatically.
 - `WiFiManager::ProcessOnce()` is the deterministic single-cycle runtime primitive used by the worker and host tests.
 - `Poll()` remains as a 0.1.x compatibility alias.
@@ -45,7 +47,7 @@
 
 - Every remembered-network password is Sensitive/redacted Serializable data.
 - Remembered-network Command output never exposes stored passwords.
-- Complete remembered profile collections continue to support optional whole-configuration authenticated protection through Persistence 0.3.x / Serializable 0.11.x / Security 0.4.x.
+- Complete remembered profile collections continue to support optional whole-configuration authenticated protection through Persistence 0.3.1 / Serializable 0.11.2 / Security 0.4.1.
 
 ### Compatibility
 
@@ -59,6 +61,7 @@
 - Implements #11 — preferred persisted Client networks and automatic selection.
 - Implements #12 — autonomous WiFi runtime on ESPressio PrecisionThread.
 - Implements #15 — `APUntilClient` IoT fallback/provisioning mode.
+- Incorporates #16 — corrected Serializable 0.11.2 dependency cascade.
 
 ## [0.1.0] - 2026-08-23
 
