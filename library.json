@@ -12,7 +12,7 @@
     "headers": ["ESPressio_WiFi.hpp", "ESPressio_WiFiWorker.hpp"],
     "dependencies": {
         "espressio-development-platform/ESPressio-Observable": ">=3.0.2 <4.0.0",
-        "espressio-development-platform/ESPressio-Serializable": ">=0.11.0 <1.0.0",
-        "espressio-development-platform/ESPressio-Threads": ">=3.1.5 <4.0.0"
+        "espressio-development-platform/ESPressio-Serializable": ">=0.11.2 <1.0.0",
+        "espressio-development-platform/ESPressio-Threads": ">=3.1.6 <4.0.0"
     }
 }
