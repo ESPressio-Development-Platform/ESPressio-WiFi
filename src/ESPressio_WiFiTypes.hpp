@@ -18,6 +18,7 @@ enum class AddressMode : uint8_t { DHCP, Static };
 struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     ESPRESSIO_SERIALIZABLE_TYPE(IPv4Address)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~IPv4Address() = default;
     std::array<uint8_t,4> Octets{};
     IPv4Address() = default;
     IPv4Address(uint8_t a,uint8_t b,uint8_t c,uint8_t d) : Octets{{a,b,c,d}} {}
@@ -36,6 +37,7 @@ struct MacAddress {
 struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
     ESPRESSIO_SERIALIZABLE_TYPE(NetworkAddress)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~NetworkAddress() = default;
     IPv4Address Address{};
     IPv4Address Gateway{};
     IPv4Address SubnetMask{255,255,255,0};
