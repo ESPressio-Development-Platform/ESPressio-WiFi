@@ -1,17 +1,18 @@
 {
     "name": "ESPressio-WiFi",
-    "version": "0.1.0",
-    "description": "Event-driven, platform-neutral WiFi management for the ESPressio Development Platform",
-    "keywords": "espressio,wifi,network,access-point,station,scan,configuration",
+    "version": "0.2.0",
+    "description": "Autonomous, platform-neutral WiFi management with remembered-network selection for the ESPressio Development Platform",
+    "keywords": "espressio,wifi,network,access-point,station,scan,configuration,threads,persistence",
     "homepage": "https://espressio.org",
     "authors": {"name":"Simon J. Stuart","maintainer":true,"url":"https://espressio.org"},
     "repository": {"type":"git","url":"https://github.com/ESPressio-Development-Platform/ESPressio-WiFi.git"},
     "license": "Apache-2.0",
     "frameworks": "arduino",
     "platforms": ["espressif32"],
-    "headers": ["ESPressio_WiFi.hpp"],
+    "headers": ["ESPressio_WiFi.hpp", "ESPressio_WiFiWorker.hpp"],
     "dependencies": {
         "espressio-development-platform/ESPressio-Observable": ">=3.0.2 <4.0.0",
-        "espressio-development-platform/ESPressio-Serializable": ">=0.11.0 <1.0.0"
+        "espressio-development-platform/ESPressio-Serializable": ">=0.11.0 <1.0.0",
+        "espressio-development-platform/ESPressio-Threads": ">=3.1.5 <4.0.0"
     }
 }
