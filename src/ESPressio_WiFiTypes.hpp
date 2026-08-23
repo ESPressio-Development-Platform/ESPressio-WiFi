@@ -53,7 +53,25 @@ struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
     )
 };
 
-struct ScanResult { std::string SSID; MacAddress BSSID{}; int32_t RSSI=0; uint8_t Channel=0; NetworkSecurity Security=NetworkSecurity::Unknown; bool Hidden=false; };
+struct ScanResult final : Serializable::Serializable<ScanResult> {
+    ESPRESSIO_SERIALIZABLE_TYPE(ScanResult)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    std::string SSID;
+    MacAddress BSSID{};
+    int32_t RSSI=0;
+    uint8_t Channel=0;
+    NetworkSecurity Security=NetworkSecurity::Unknown;
+    bool Hidden=false;
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("ssid", SSID),
+        ESPRESSIO_PROPERTY("bssid", BSSID),
+        ESPRESSIO_PROPERTY("rssi", RSSI),
+        ESPRESSIO_PROPERTY("channel", Channel),
+        ESPRESSIO_PROPERTY("security", Security),
+        ESPRESSIO_PROPERTY("hidden", Hidden)
+    )
+};
+
 struct ClientRuntimeState { ClientState State=ClientState::Disabled; std::string SSID; MacAddress BSSID{}; int32_t RSSI=0; uint8_t Channel=0; NetworkAddress Network{}; uint32_t ReconnectAttempt=0; };
 struct AccessPointRuntimeState { AccessPointState State=AccessPointState::Disabled; std::string SSID; uint8_t Channel=0; NetworkAddress Network{}; uint16_t ConnectedStations=0; };
 struct WiFiRuntimeState { WiFiMode Mode=WiFiMode::Disabled; ClientRuntimeState Client{}; AccessPointRuntimeState AccessPoint{}; ScanState Scan=ScanState::Idle; uint64_t Revision=0; };
@@ -92,6 +110,18 @@ ESPRESSIO_ENUM_MAPPING(
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ScanState::Scanning, "scanning"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ScanState::Complete, "complete"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ScanState::Failed, "failed")
+)
+
+ESPRESSIO_ENUM_MAPPING(
+    ESPressio::WiFi::NetworkSecurity,
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::NetworkSecurity::Open, "open"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::NetworkSecurity::WEP, "wep"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::NetworkSecurity::WPA, "wpa"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::NetworkSecurity::WPA2, "wpa2"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::NetworkSecurity::WPA_WPA2, "wpa-wpa2"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::NetworkSecurity::WPA3, "wpa3"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::NetworkSecurity::WPA2_WPA3, "wpa2-wpa3"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::NetworkSecurity::Unknown, "unknown")
 )
 
 ESPRESSIO_ENUM_MAPPING(
