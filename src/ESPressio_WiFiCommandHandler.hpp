@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdio>
 #include <sstream>
 #include <string>
@@ -17,18 +18,20 @@ public:
         if (!_registration.Active()) return false;
 
         auto& root = registry.Command("wifi").Description("ESPressio WiFi control and diagnostics");
-        root.Command("status").Description("Show composite AP/client/scan WiFi state")
+        root.Command("status").Description("Show composite AP/client/provisioning/scan WiFi state")
             .OnExecute([this](const Command::CommandContext&) { return Status(); });
 
         auto& mode = root.Command("mode").Description("Set WiFi operating mode");
-        mode.Parameter("mode", Command::ParameterKind::Enumeration).OneOf({"disabled","client","ap","ap-client"});
+        mode.Parameter("mode", Command::ParameterKind::Enumeration)
+            .OneOf({"disabled","client","ap","ap-client","provisioning"});
         mode.OnExecute([this](const Command::CommandContext& context) {
             auto config = _manager->Configuration();
             const auto text = context.Get<std::string>("mode");
             if (text == "disabled") config.Mode = WiFiMode::Disabled;
             else if (text == "client") config.Mode = WiFiMode::Client;
             else if (text == "ap") config.Mode = WiFiMode::AccessPoint;
-            else config.Mode = WiFiMode::AccessPointClient;
+            else if (text == "ap-client") config.Mode = WiFiMode::AccessPointClient;
+            else config.Mode = WiFiMode::Provisioning;
             return Result(_manager->Configure(std::move(config)));
         });
 
@@ -39,6 +42,7 @@ public:
 
         ConfigureClientCommands(root.Command("client").Description("Station/client controls"));
         ConfigureAccessPointCommands(root.Command("ap").Description("Access Point controls"));
+        ConfigureProvisioningCommands(root.Command("provisioning").Description("Provisioning-mode controls"));
         ConfigureConfigurationCommands(root.Command("config").Description("Safe WiFi configuration controls"));
         return true;
     }
@@ -107,7 +111,6 @@ private:
                 ? Command::CommandResult::Ok("OK") : Command::CommandResult::Error("Remembered network not found");
         });
 
-        // Legacy single-network controls remain for 0.1.x source compatibility.
         auto& ssid = client.Command("ssid");
         ssid.Parameter<std::string>("ssid");
         ssid.OnExecute([this](const Command::CommandContext& context) {
@@ -186,6 +189,28 @@ private:
         AddIPv4Setter(dhcp, "lease-end", [](WiFiConfiguration& c, const IPv4Address& v){ c.AccessPoint.DHCP.LeaseEnd = v; });
     }
 
+    void ConfigureProvisioningCommands(Command::CommandNode& provisioning) {
+        provisioning.Command("status").OnExecute([this](const Command::CommandContext&) {
+            const auto state = _manager->State().Provisioning;
+            std::ostringstream out;
+            out << "state=" << ProvisioningStateName(state.State)
+                << " ap-required=" << (state.AccessPointRequired ? "true" : "false")
+                << " fallback-timeout-ms=" << state.FallbackTimeoutMilliseconds
+                << " grace-start-ms=" << state.GracePeriodStartedMilliseconds;
+            return Command::CommandResult::Ok(out.str());
+        });
+
+        auto& timeout = provisioning.Command("fallback-timeout");
+        timeout.Description("Set Client-loss grace period before Provisioning AP fallback");
+        timeout.Parameter<unsigned int>("milliseconds");
+        timeout.OnExecute([this](const Command::CommandContext& context) {
+            auto config = _manager->Configuration();
+            config.Provisioning.AccessPointFallbackTimeoutMilliseconds =
+                static_cast<uint32_t>(context.Get<unsigned int>("milliseconds"));
+            return Result(_manager->Configure(std::move(config)));
+        });
+    }
+
     void ConfigureConfigurationCommands(Command::CommandNode& config) {
         config.Command("show").Description("Show configuration with credentials always redacted")
             .OnExecute([this](const Command::CommandContext&) { return ShowConfiguration(); });
@@ -223,7 +248,8 @@ private:
         out << "mode=" << ModeName(state.Mode) << " ap=" << APStateName(state.AccessPoint.State)
             << " stations=" << state.AccessPoint.ConnectedStations << " client=" << ClientStateName(state.Client.State)
             << " ip=" << state.Client.Network.Address.ToString() << " scan=" << ScanStateName(state.Scan)
-            << " selection=" << SelectionStateName(state.Client.Selection.State);
+            << " selection=" << SelectionStateName(state.Client.Selection.State)
+            << " provisioning=" << ProvisioningStateName(state.Provisioning.State);
         return Command::CommandResult::Ok(out.str());
     }
 
@@ -258,6 +284,7 @@ private:
         std::ostringstream out;
         out << "mode=" << ModeName(c.Mode) << " hostname=" << c.Hostname
             << " tx-power=" << static_cast<int>(c.TxPowerDbm) << " power-save=" << (c.PowerSave ? "true" : "false")
+            << " provisioning.fallback-timeout-ms=" << c.Provisioning.AccessPointFallbackTimeoutMilliseconds
             << "\nap.ssid=" << c.AccessPoint.SSID << " ap.password=<redacted> ap.channel=" << static_cast<unsigned>(c.AccessPoint.Channel)
             << " ap.dhcp=" << (c.AccessPoint.DHCP.Enabled ? "true" : "false")
             << "\nclient.automatic-selection=" << (c.Client.Selection.AutomaticSelection ? "true" : "false")
@@ -279,12 +306,13 @@ private:
         output = IPv4Address(static_cast<uint8_t>(a),static_cast<uint8_t>(b),static_cast<uint8_t>(c),static_cast<uint8_t>(d)); return true;
     }
     static const char* StatusName(WiFiStatus v){switch(v){case WiFiStatus::Success:return"success";case WiFiStatus::InvalidConfiguration:return"invalid configuration";case WiFiStatus::NotSupported:return"not supported";case WiFiStatus::Busy:return"busy";default:return"platform error";}}
-    static const char* ModeName(WiFiMode v){switch(v){case WiFiMode::Disabled:return"disabled";case WiFiMode::Client:return"client";case WiFiMode::AccessPoint:return"ap";default:return"ap-client";}}
+    static const char* ModeName(WiFiMode v){switch(v){case WiFiMode::Disabled:return"disabled";case WiFiMode::Client:return"client";case WiFiMode::AccessPoint:return"ap";case WiFiMode::AccessPointClient:return"ap-client";default:return"provisioning";}}
     static const char* ClientStateName(ClientState v){switch(v){case ClientState::Disabled:return"disabled";case ClientState::Idle:return"idle";case ClientState::Connecting:return"connecting";case ClientState::Connected:return"connected";case ClientState::Reconnecting:return"reconnecting";case ClientState::Disconnecting:return"disconnecting";case ClientState::Disconnected:return"disconnected";default:return"failed";}}
     static const char* APStateName(AccessPointState v){switch(v){case AccessPointState::Disabled:return"disabled";case AccessPointState::Starting:return"starting";case AccessPointState::Active:return"active";default:return"failed";}}
     static const char* ScanStateName(ScanState v){switch(v){case ScanState::Idle:return"idle";case ScanState::Scanning:return"scanning";case ScanState::Complete:return"complete";default:return"failed";}}
     static const char* SecurityName(NetworkSecurity v){switch(v){case NetworkSecurity::Open:return"open";case NetworkSecurity::WEP:return"wep";case NetworkSecurity::WPA:return"wpa";case NetworkSecurity::WPA2:return"wpa2";case NetworkSecurity::WPA_WPA2:return"wpa-wpa2";case NetworkSecurity::WPA3:return"wpa3";case NetworkSecurity::WPA2_WPA3:return"wpa2-wpa3";default:return"unknown";}}
     static const char* SelectionStateName(ClientNetworkSelectionState v){switch(v){case ClientNetworkSelectionState::Idle:return"idle";case ClientNetworkSelectionState::Scanning:return"scanning";case ClientNetworkSelectionState::Selecting:return"selecting";case ClientNetworkSelectionState::Connecting:return"connecting";case ClientNetworkSelectionState::Connected:return"connected";case ClientNetworkSelectionState::NoKnownNetworkAvailable:return"no-known-network";default:return"exhausted";}}
+    static const char* ProvisioningStateName(ProvisioningState v){switch(v){case ProvisioningState::Inactive:return"inactive";case ProvisioningState::AccessPointAvailable:return"ap-available";case ProvisioningState::ConnectingKnownNetwork:return"connecting-known-network";case ProvisioningState::ClientConnected:return"client-connected";case ProvisioningState::ClientGracePeriod:return"client-grace-period";default:return"ap-fallback";}}
 
     WiFiManager* _manager = nullptr;
     Command::CommandRegistrationHandle _registration;
