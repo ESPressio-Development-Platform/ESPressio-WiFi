@@ -55,8 +55,6 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
     bool Enabled = false;
 
     // 0.1.x single-network fields remain source- and persistence-compatible.
-    // New 0.2.x applications should prefer Networks. When Networks is non-empty,
-    // automatic remembered-network selection is authoritative.
     std::string SSID;
     std::string Password;
     AddressMode Addressing = AddressMode::DHCP;
@@ -80,8 +78,6 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
         uint32_t fromVersion,
         uint32_t toVersion
     ) {
-        // v2 only adds optional/defaulted remembered-network fields. Existing
-        // 0.1.x SSID/password/addressing values remain intact as the legacy path.
         return fromVersion == 1 && toVersion == 2;
     }
 };
@@ -142,7 +138,7 @@ struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
     uint32_t InitialDelayMilliseconds = 1000;
     uint32_t MaximumDelayMilliseconds = 30000;
     float BackoffMultiplier = 2.0f;
-    uint32_t MaximumAttempts = 0; // zero = unlimited
+    uint32_t MaximumAttempts = 0;
     uint32_t ConnectionTimeoutMilliseconds = 15000;
 
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
@@ -155,15 +151,32 @@ struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
     )
 };
 
+struct ProvisioningConfiguration final : Serializable::Serializable<ProvisioningConfiguration> {
+    ESPRESSIO_SERIALIZABLE_TYPE(ProvisioningConfiguration)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+
+    // Time allowed to recover Client connectivity after it has been lost before
+    // the setup/recovery AP is restored. Zero means immediate AP fallback.
+    uint32_t AccessPointFallbackTimeoutMilliseconds = 30000;
+
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY(
+            "accessPointFallbackTimeoutMilliseconds",
+            AccessPointFallbackTimeoutMilliseconds
+        )
+    )
+};
+
 struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiConfiguration)
-    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(2)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(3)
 
     WiFiMode Mode = WiFiMode::AccessPoint;
     std::string Hostname = "espressio";
     ClientConfiguration Client{};
     AccessPointConfiguration AccessPoint{};
     ReconnectPolicy Reconnect{};
+    ProvisioningConfiguration Provisioning{};
     int8_t TxPowerDbm = 20;
     bool PowerSave = false;
 
@@ -173,6 +186,7 @@ struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
         ESPRESSIO_PROPERTY("client", Client),
         ESPRESSIO_PROPERTY("accessPoint", AccessPoint),
         ESPRESSIO_PROPERTY("reconnect", Reconnect),
+        ESPRESSIO_PROPERTY("provisioning", Provisioning),
         ESPRESSIO_PROPERTY("txPowerDbm", TxPowerDbm),
         ESPRESSIO_PROPERTY("powerSave", PowerSave)
     )
@@ -182,7 +196,10 @@ struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
         uint32_t fromVersion,
         uint32_t toVersion
     ) {
-        return fromVersion == 1 && toVersion == 2;
+        return
+            (fromVersion == 1 && toVersion == 2) ||
+            (fromVersion == 2 && toVersion == 3) ||
+            (fromVersion == 1 && toVersion == 3);
     }
 };
 
