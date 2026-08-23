@@ -14,6 +14,7 @@ enum class AccessPointState : uint8_t { Disabled, Starting, Active, Failed };
 enum class ScanState : uint8_t { Idle, Scanning, Complete, Failed };
 enum class NetworkSecurity : uint8_t { Open, WEP, WPA, WPA2, WPA_WPA2, WPA3, WPA2_WPA3, Unknown };
 enum class AddressMode : uint8_t { DHCP, Static };
+enum class ClientNetworkSelectionState : uint8_t { Idle, Scanning, Selecting, Connecting, Connected, NoKnownNetworkAvailable, Exhausted };
 
 struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     ESPRESSIO_SERIALIZABLE_TYPE(IPv4Address)
@@ -72,7 +73,34 @@ struct ScanResult final : Serializable::Serializable<ScanResult> {
     )
 };
 
-struct ClientRuntimeState { ClientState State=ClientState::Disabled; std::string SSID; MacAddress BSSID{}; int32_t RSSI=0; uint8_t Channel=0; NetworkAddress Network{}; uint32_t ReconnectAttempt=0; };
+struct ClientNetworkCandidate {
+    std::string SSID;
+    MacAddress BSSID{};
+    uint16_t Priority = 0;
+    int32_t RSSI = 0;
+    uint8_t Channel = 0;
+    std::size_t ProfileIndex = 0;
+};
+
+struct ClientNetworkSelectionRuntimeState {
+    ClientNetworkSelectionState State = ClientNetworkSelectionState::Idle;
+    std::string SelectedSSID;
+    uint16_t SelectedPriority = 0;
+    std::size_t SelectedProfileIndex = 0;
+    std::size_t EligibleCandidateCount = 0;
+};
+
+struct ClientRuntimeState {
+    ClientState State=ClientState::Disabled;
+    std::string SSID;
+    MacAddress BSSID{};
+    int32_t RSSI=0;
+    uint8_t Channel=0;
+    NetworkAddress Network{};
+    uint32_t ReconnectAttempt=0;
+    ClientNetworkSelectionRuntimeState Selection{};
+};
+
 struct AccessPointRuntimeState { AccessPointState State=AccessPointState::Disabled; std::string SSID; uint8_t Channel=0; NetworkAddress Network{}; uint16_t ConnectedStations=0; };
 struct WiFiRuntimeState { WiFiMode Mode=WiFiMode::Disabled; ClientRuntimeState Client{}; AccessPointRuntimeState AccessPoint{}; ScanState Scan=ScanState::Idle; uint64_t Revision=0; };
 
@@ -130,4 +158,15 @@ ESPRESSIO_ENUM_MAPPING(
     ESPressio::WiFi::AddressMode,
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::AddressMode::DHCP, "dhcp"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::AddressMode::Static, "static")
+)
+
+ESPRESSIO_ENUM_MAPPING(
+    ESPressio::WiFi::ClientNetworkSelectionState,
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::Idle, "idle"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::Scanning, "scanning"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::Selecting, "selecting"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::Connecting, "connecting"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::Connected, "connected"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::NoKnownNetworkAvailable, "no-known-network-available"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientNetworkSelectionState::Exhausted, "exhausted")
 )
