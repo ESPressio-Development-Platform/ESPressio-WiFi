@@ -17,6 +17,14 @@
 - Added configurable worker iteration period and desired execution budget.
 - Added immediate worker bumping for explicit WiFi work so commands and configuration changes do not wait for the next periodic iteration.
 - Added thread-safe snapshot access for configuration, runtime state, scans and remembered-network candidates.
+- Added `WiFiMode::APUntilClient` for IoT provisioning/recovery behaviour where the device prefers remembered Client networks but exposes a fallback AP while Client connectivity is unavailable.
+- Added Serializable `APUntilClientConfiguration` with configurable fallback timeout and retry-scan interval.
+- Added immediate fallback AP activation when no remembered networks exist.
+- Added delayed fallback when remembered networks exist but no usable Client connection can be established before the configured timeout.
+- Added AP+STA retry behaviour while the fallback AP is active, allowing remembered networks to be retried without deliberately dropping provisioning/control clients.
+- Added automatic fallback-AP shutdown and return to STA-only radio mode after successful Client connectivity.
+- Added immediate remembered-network retry when a profile is added or updated during `APUntilClient` fallback operation.
+- Added `wifi mode ap-until-client`, `wifi ap-until-client fallback-timeout` and `wifi ap-until-client retry-interval` Command controls.
 
 ### Changed
 
@@ -27,6 +35,7 @@
 - The ESP32 platform adapter now receives a selected `ClientNetworkProfile`; remembered-network choice remains platform-neutral manager logic.
 - A healthy current Client connection is sticky by default: manual/background scans do not force roaming merely because a higher-priority remembered network appears.
 - Callbacks are copied and invoked outside internal WiFi state locks so notifications may safely call back into WiFi.
+- The ESP32 adapter now transitions `APUntilClient` between STA-only and AP+STA at runtime rather than treating it as permanent AP+Client operation.
 
 ### Security
 
@@ -38,12 +47,14 @@
 
 - Existing 0.1.x single-client SSID/password/addressing fields and commands remain available for source compatibility.
 - `Poll()` remains available for existing manually serviced applications, though new code should use `WiFiWorker`.
+- `AccessPointClient` remains a persistent AP+Client mode; the new `APUntilClient` behaviour is opt-in and does not alter existing AP+Client semantics.
 - This is a backward-compatible public feature release and advances WiFi to 0.2.0.
 
 ### Tracking
 
 - Implements #11 — preferred persisted Client networks and automatic selection.
 - Implements #12 — autonomous WiFi runtime on ESPressio PrecisionThread.
+- Implements #15 — `APUntilClient` IoT fallback/provisioning mode.
 
 ## [0.1.0] - 2026-08-23
 
