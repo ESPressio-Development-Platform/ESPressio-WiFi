@@ -17,13 +17,7 @@ public:
         const Serializable::SerializationProtectionConfig& protection,
         bool preferAtomicFileReplace = true
     ) {
-        return Persistence::SaveSerializable(
-            storage,
-            path,
-            configuration,
-            protection,
-            preferAtomicFileReplace
-        );
+        return Persistence::SaveSerializable(storage, path, configuration, protection, preferAtomicFileReplace);
     }
 
     template<typename TConfiguration>
@@ -72,9 +66,17 @@ public:
                 "Persistence backend rejected protected WiFi configuration"
             );
         }
+
+        std::string message = Serializable::ProtectedSerializationStatusName(
+            result.Serialization.Status
+        );
+        if (!result.Serialization.SecurityResult.Message.empty()) {
+            message += ": ";
+            message += result.Serialization.SecurityResult.Message;
+        }
         return WiFiConfigurationStoreResult::Fail(
             WiFiConfigurationStoreStatus::ProtectionError,
-            result.Serialization.Message
+            std::move(message)
         );
     }
 };
@@ -86,32 +88,20 @@ public:
         std::string path,
         Serializable::SerializationProtectionConfig protection,
         bool preferAtomicFileReplace = true
-    ) :
-        _storage(storage),
-        _path(std::move(path)),
-        _protection(std::move(protection)),
+    ) : _storage(storage), _path(std::move(path)), _protection(std::move(protection)),
         _preferAtomicFileReplace(preferAtomicFileReplace) {}
 
     WiFiConfigurationStoreResult Save(const WiFiConfiguration& configuration) override {
         return ProtectedWiFiConfigurationStore::Translate(
             ProtectedWiFiConfigurationStore::Save(
-                _storage,
-                _path.c_str(),
-                configuration,
-                _protection,
-                _preferAtomicFileReplace
+                _storage, _path.c_str(), configuration, _protection, _preferAtomicFileReplace
             )
         );
     }
 
     WiFiConfigurationStoreResult Load(WiFiConfiguration& configuration) override {
         return ProtectedWiFiConfigurationStore::Translate(
-            ProtectedWiFiConfigurationStore::Load(
-                _storage,
-                _path.c_str(),
-                configuration,
-                _protection
-            )
+            ProtectedWiFiConfigurationStore::Load(_storage, _path.c_str(), configuration, _protection)
         );
     }
 
@@ -128,30 +118,17 @@ public:
         Persistence::IKeyValueStorage& storage,
         std::string key,
         Serializable::SerializationProtectionConfig protection
-    ) :
-        _storage(storage),
-        _key(std::move(key)),
-        _protection(std::move(protection)) {}
+    ) : _storage(storage), _key(std::move(key)), _protection(std::move(protection)) {}
 
     WiFiConfigurationStoreResult Save(const WiFiConfiguration& configuration) override {
         return ProtectedWiFiConfigurationStore::Translate(
-            ProtectedWiFiConfigurationStore::Save(
-                _storage,
-                _key.c_str(),
-                configuration,
-                _protection
-            )
+            ProtectedWiFiConfigurationStore::Save(_storage, _key.c_str(), configuration, _protection)
         );
     }
 
     WiFiConfigurationStoreResult Load(WiFiConfiguration& configuration) override {
         return ProtectedWiFiConfigurationStore::Translate(
-            ProtectedWiFiConfigurationStore::Load(
-                _storage,
-                _key.c_str(),
-                configuration,
-                _protection
-            )
+            ProtectedWiFiConfigurationStore::Load(_storage, _key.c_str(), configuration, _protection)
         );
     }
 
