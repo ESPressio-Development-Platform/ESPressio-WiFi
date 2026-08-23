@@ -264,18 +264,20 @@ public:
         if (status != WiFiStatus::Success) return status;
 
         WiFiRuntimeState before;
+        bool scanCompleted = false;
         {
             std::lock_guard<std::mutex> lock(_mutex);
             before = _state;
             before.Client.Selection = _selectionState;
             next.Client.Selection = _selectionState;
+            scanCompleted = before.Scan != ScanState::Complete && next.Scan == ScanState::Complete;
             _state = next;
-            if (!scan.empty()) _lastScanResults = scan;
+            if (scanCompleted) _lastScanResults = scan;
         }
 
         NotifyStateTransitions(before, next);
 
-        if (!scan.empty()) {
+        if (scanCompleted) {
             auto callback = CopyCallback(_scanCallback);
             if (callback) callback(scan);
             _observable->ScanComplete(scan);
