@@ -14,7 +14,7 @@ endif()
 
 FetchContent_Declare(ESPressioSerializable
     GIT_REPOSITORY https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git
-    GIT_TAG 0.11.0 GIT_SHALLOW TRUE)
+    GIT_TAG bugfix/23-serializable-value-composition)
 FetchContent_GetProperties(ESPressioSerializable)
 if(NOT espressioserializable_POPULATED)
     FetchContent_Populate(ESPressioSerializable)
