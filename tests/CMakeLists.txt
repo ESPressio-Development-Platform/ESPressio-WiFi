@@ -20,11 +20,17 @@ if(NOT espressioserializable_POPULATED)
     FetchContent_Populate(ESPressioSerializable)
 endif()
 
-add_executable(espressio_wifi_tests test_wifi.cpp)
-target_include_directories(espressio_wifi_tests PRIVATE
+set(WIFI_TEST_INCLUDES
     ../src
     ${espressioobservable_SOURCE_DIR}/src
     ${espressioserializable_SOURCE_DIR}/src)
 
+add_executable(espressio_wifi_tests test_wifi.cpp)
+target_include_directories(espressio_wifi_tests PRIVATE ${WIFI_TEST_INCLUDES})
+
+add_executable(espressio_wifi_configuration_tests test_configuration.cpp)
+target_include_directories(espressio_wifi_configuration_tests PRIVATE ${WIFI_TEST_INCLUDES})
+
 enable_testing()
 add_test(NAME ESPressioWiFiTests COMMAND espressio_wifi_tests)
+add_test(NAME ESPressioWiFiConfigurationTests COMMAND espressio_wifi_configuration_tests)
