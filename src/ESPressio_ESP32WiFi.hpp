@@ -30,7 +30,10 @@ public:
             case WiFiMode::Disabled: mode = WIFI_MODE_NULL; break;
             case WiFiMode::Client: mode = WIFI_MODE_STA; break;
             case WiFiMode::AccessPoint: mode = WIFI_MODE_AP; break;
-            case WiFiMode::AccessPointClient: mode = WIFI_MODE_APSTA; break;
+            case WiFiMode::AccessPointClient:
+            case WiFiMode::Provisioning:
+                mode = WIFI_MODE_APSTA;
+                break;
         }
         if (!::WiFi.mode(mode)) return WiFiStatus::PlatformError;
         if (!configuration.Hostname.empty()) (void)::WiFi.setHostname(configuration.Hostname.c_str());
@@ -41,8 +44,6 @@ public:
         if (UsesAP(configuration.Mode) && !ConfigureAccessPoint()) return WiFiStatus::PlatformError;
         ApplyRadioSettings();
 
-        // 0.2.0 remembered-network selection is manager-owned. The platform only
-        // auto-connects the legacy single-network configuration path.
         if (UsesClient(configuration.Mode) && configuration.Client.Enabled &&
             !automaticProfiles && !configuration.Client.SSID.empty()) {
             BeginClient(false);
@@ -154,8 +155,17 @@ public:
     }
 
 private:
-    static bool UsesAP(WiFiMode mode) { return mode == WiFiMode::AccessPoint || mode == WiFiMode::AccessPointClient; }
-    static bool UsesClient(WiFiMode mode) { return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient; }
+    static bool UsesAP(WiFiMode mode) {
+        return mode == WiFiMode::AccessPoint ||
+            mode == WiFiMode::AccessPointClient ||
+            mode == WiFiMode::Provisioning;
+    }
+
+    static bool UsesClient(WiFiMode mode) {
+        return mode == WiFiMode::Client ||
+            mode == WiFiMode::AccessPointClient ||
+            mode == WiFiMode::Provisioning;
+    }
 
     static bool ValidateCredential(const std::string& password) {
         return password.empty() || (password.size() >= 8 && password.size() <= 63);
@@ -273,7 +283,7 @@ private:
 
     void PollReconnect() {
         if (!UsesClient(_configuration.Mode) || !_configuration.Client.Enabled || _manualDisconnect) return;
-        if (ActiveSSID().empty()) return; // manager may still be scanning/selecting a profile
+        if (ActiveSSID().empty()) return;
         const auto status = ::WiFi.status();
         if (status == WL_CONNECTED) {
             _reconnectAttempts = 0;
@@ -312,12 +322,19 @@ private:
             next.Client = ClientRuntimeState{};
         }
         if (UsesAP(_configuration.Mode)) {
-            next.AccessPoint.State = ::WiFi.softAPIP() == IPAddress(0,0,0,0) ? AccessPointState::Starting : AccessPointState::Active;
-            next.AccessPoint.SSID = _configuration.AccessPoint.SSID;
-            next.AccessPoint.Channel = _configuration.AccessPoint.Channel;
-            next.AccessPoint.Network = _configuration.AccessPoint.Network;
-            next.AccessPoint.Network.Address = Convert(::WiFi.softAPIP());
-            next.AccessPoint.ConnectedStations = static_cast<uint16_t>(::WiFi.softAPgetStationNum());
+            const auto apIP = ::WiFi.softAPIP();
+            if (apIP == IPAddress(0,0,0,0)) {
+                next.AccessPoint.State = AccessPointState::Disabled;
+                next.AccessPoint.Network.Address = IPv4Address{};
+                next.AccessPoint.ConnectedStations = 0;
+            } else {
+                next.AccessPoint.State = AccessPointState::Active;
+                next.AccessPoint.SSID = _configuration.AccessPoint.SSID;
+                next.AccessPoint.Channel = _configuration.AccessPoint.Channel;
+                next.AccessPoint.Network = _configuration.AccessPoint.Network;
+                next.AccessPoint.Network.Address = Convert(apIP);
+                next.AccessPoint.ConnectedStations = static_cast<uint16_t>(::WiFi.softAPgetStationNum());
+            }
         } else next.AccessPoint = AccessPointRuntimeState{};
         if (StateChanged(next, _state)) {
             next.Revision = _state.Revision + 1;
