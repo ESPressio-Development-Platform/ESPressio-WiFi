@@ -53,13 +53,10 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(2)
 
     bool Enabled = false;
-
-    // 0.1.x single-network fields remain source- and persistence-compatible.
     std::string SSID;
     std::string Password;
     AddressMode Addressing = AddressMode::DHCP;
     NetworkAddress StaticNetwork{};
-
     std::vector<ClientNetworkProfile> Networks;
     ClientNetworkSelectionConfiguration Selection{};
 
@@ -73,11 +70,7 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
         ESPRESSIO_PROPERTY("selection", Selection)
     )
 
-    static bool Migrate(
-        Serializable::SerializationNode&,
-        uint32_t fromVersion,
-        uint32_t toVersion
-    ) {
+    static bool Migrate(Serializable::SerializationNode&, uint32_t fromVersion, uint32_t toVersion) {
         return fromVersion == 1 && toVersion == 2;
     }
 };
@@ -85,12 +78,10 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
 struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(DHCPServerConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
-
     bool Enabled = true;
     IPv4Address LeaseStart{192,168,4,2};
     IPv4Address LeaseEnd{192,168,4,100};
     uint32_t LeaseDurationSeconds = 7200;
-
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
         ESPRESSIO_PROPERTY("enabled", Enabled),
         ESPRESSIO_PROPERTY("leaseStart", LeaseStart),
@@ -102,7 +93,6 @@ struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConf
 struct AccessPointConfiguration final : Serializable::Serializable<AccessPointConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(AccessPointConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
-
     bool Enabled = true;
     std::string SSID;
     std::string Password;
@@ -133,14 +123,12 @@ struct AccessPointConfiguration final : Serializable::Serializable<AccessPointCo
 struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
     ESPRESSIO_SERIALIZABLE_TYPE(ReconnectPolicy)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
-
     bool Enabled = true;
     uint32_t InitialDelayMilliseconds = 1000;
     uint32_t MaximumDelayMilliseconds = 30000;
     float BackoffMultiplier = 2.0f;
     uint32_t MaximumAttempts = 0;
     uint32_t ConnectionTimeoutMilliseconds = 15000;
-
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
         ESPRESSIO_PROPERTY("enabled", Enabled),
         ESPRESSIO_PROPERTY("initialDelayMilliseconds", InitialDelayMilliseconds),
@@ -151,15 +139,29 @@ struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
     )
 };
 
+struct APUntilClientConfiguration final : Serializable::Serializable<APUntilClientConfiguration> {
+    ESPRESSIO_SERIALIZABLE_TYPE(APUntilClientConfiguration)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+
+    uint32_t FallbackTimeoutMilliseconds = 30000;
+    uint32_t RetryScanIntervalMilliseconds = 30000;
+
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("fallbackTimeoutMilliseconds", FallbackTimeoutMilliseconds),
+        ESPRESSIO_PROPERTY("retryScanIntervalMilliseconds", RetryScanIntervalMilliseconds)
+    )
+};
+
 struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiConfiguration)
-    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(2)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(3)
 
     WiFiMode Mode = WiFiMode::AccessPoint;
     std::string Hostname = "espressio";
     ClientConfiguration Client{};
     AccessPointConfiguration AccessPoint{};
     ReconnectPolicy Reconnect{};
+    APUntilClientConfiguration APUntilClient{};
     int8_t TxPowerDbm = 20;
     bool PowerSave = false;
 
@@ -169,16 +171,15 @@ struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
         ESPRESSIO_PROPERTY("client", Client),
         ESPRESSIO_PROPERTY("accessPoint", AccessPoint),
         ESPRESSIO_PROPERTY("reconnect", Reconnect),
+        ESPRESSIO_PROPERTY("apUntilClient", APUntilClient),
         ESPRESSIO_PROPERTY("txPowerDbm", TxPowerDbm),
         ESPRESSIO_PROPERTY("powerSave", PowerSave)
     )
 
-    static bool Migrate(
-        Serializable::SerializationNode&,
-        uint32_t fromVersion,
-        uint32_t toVersion
-    ) {
-        return fromVersion == 1 && toVersion == 2;
+    static bool Migrate(Serializable::SerializationNode&, uint32_t fromVersion, uint32_t toVersion) {
+        return (fromVersion == 1 && toVersion == 2) ||
+               (fromVersion == 2 && toVersion == 3) ||
+               (fromVersion == 1 && toVersion == 3);
     }
 };
 
