@@ -15,7 +15,7 @@ public:
     WiFiStatus StartScan() override { state.Scan=ScanState::Scanning; state.Revision++; return WiFiStatus::Success; }
     WiFiStatus Poll(WiFiRuntimeState& output,std::vector<ScanResult>* scans,std::vector<WiFiPlatformEvent>* events) override {
         output=state;
-        if (deliverScan && scans) { scans->push_back({"Lab",{},-42,6,NetworkSecurity::WPA2,false}); deliverScan=false; }
+        if (deliverScan && scans) { ScanResult r; r.SSID="Lab"; r.RSSI=-42; r.Channel=6; r.Security=NetworkSecurity::WPA2; scans->push_back(r); deliverScan=false; }
         if (!pending.empty() && events) { *events=pending; pending.clear(); }
         return WiFiStatus::Success;
     }
@@ -41,8 +41,10 @@ int main() {
     assert(wifi.StartAccessPoint()==WiFiStatus::Success); assert(wifi.Poll()==WiFiStatus::Success); assert(observer.aps==1);
     platform.deliverScan=true; platform.state.Scan=ScanState::Complete; platform.state.Revision++;
     assert(wifi.Poll()==WiFiStatus::Success); assert(observer.scans==1);
-    WiFiPlatformEvent joined{WiFiPlatformEventKind::AccessPointStationConnected,{},{}};
-    WiFiPlatformEvent ip{WiFiPlatformEventKind::ClientIPAddressAcquired,{},{{IPv4Address(10,0,0,2),IPv4Address(10,0,0,1),IPv4Address(255,255,255,0),{}, {}}}};
+
+    NetworkAddress network; network.Address=IPv4Address(10,0,0,2); network.Gateway=IPv4Address(10,0,0,1); network.SubnetMask=IPv4Address(255,255,255,0);
+    WiFiPlatformEvent joined; joined.Kind=WiFiPlatformEventKind::AccessPointStationConnected;
+    WiFiPlatformEvent ip; ip.Kind=WiFiPlatformEventKind::ClientIPAddressAcquired; ip.Network=network;
     platform.pending={joined,ip}; assert(wifi.Poll()==WiFiStatus::Success); assert(observer.joined==1); assert(observer.ips==1);
     assert(wifi.Configuration().AccessPoint.SSID=="lab-ap");
     return 0;
