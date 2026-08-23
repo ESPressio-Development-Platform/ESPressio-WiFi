@@ -28,11 +28,17 @@ jobs:
       - name: Create integration consumer
         run: |
           mkdir -p project/consumer/src
+          cat > project/consumer/network_include.py <<'EOF'
+          Import("env")
+          framework = env.PioPlatform().get_package_dir("framework-arduinoespressif32")
+          env.Append(CPPPATH=[framework + "/libraries/Network/src"])
+          EOF
           cat > project/consumer/platformio.ini <<'EOF'
           [env:esp32]
           platform = https://github.com/pioarduino/platform-espressif32/releases/download/55.03.311/platform-espressif32.zip
           board = esp32dev
           framework = arduino
+          extra_scripts = pre:network_include.py
           build_flags = -std=gnu++17 -frtti
           build_unflags = -std=gnu++11 -fno-rtti
           lib_ldf_mode = deep+
