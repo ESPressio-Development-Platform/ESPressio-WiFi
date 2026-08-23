@@ -1,8 +1,8 @@
 {
     "name": "ESPressio-WiFi",
     "version": "0.2.0",
-    "description": "Autonomous, platform-neutral WiFi management with remembered-network selection for the ESPressio Development Platform",
-    "keywords": "espressio,wifi,network,access-point,station,scan,configuration,threads,persistence",
+    "description": "Autonomous, platform-neutral WiFi management with remembered-network selection and APUntilClient fallback for the ESPressio Development Platform",
+    "keywords": "espressio,wifi,network,access-point,station,scan,configuration,threads,persistence,iot,provisioning",
     "homepage": "https://espressio.org",
     "authors": {"name":"Simon J. Stuart","maintainer":true,"url":"https://espressio.org"},
     "repository": {"type":"git","url":"https://github.com/ESPressio-Development-Platform/ESPressio-WiFi.git"},
