@@ -1,0 +1,68 @@
+name: WiFi Tests
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build
+      - run: cmake --build build --parallel
+      - run: ctest --test-dir build --output-on-failure
+
+  esp32:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: project/ESPressio-WiFi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: pip install platformio
+      - name: Create integration consumer
+        run: |
+          mkdir -p project/consumer/src
+          cat > project/consumer/platformio.ini <<'EOF'
+          [env:esp32]
+          platform = https://github.com/pioarduino/platform-espressif32/releases/download/55.03.311/platform-espressif32.zip
+          board = esp32dev
+          framework = arduino
+          build_flags = -std=gnu++17
+          build_unflags = -std=gnu++11
+          lib_deps =
+              ../ESPressio-WiFi
+              https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#3.0.2
+              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#6.0.1
+              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#1.0.1
+          EOF
+          cat > project/consumer/src/main.cpp <<'EOF'
+          #include <Arduino.h>
+          #include <ESPressio_ESP32WiFi.hpp>
+          #include <ESPressio_WiFiPersistence.hpp>
+          #include <ESPressio_WiFiPersistenceSecurity.hpp>
+          #include <ESPressio_WiFiEventBridge.hpp>
+          #include <ESPressio_WiFiCommandHandler.hpp>
+          using namespace ESPressio;
+          WiFi::ESP32WiFiPlatform platform;
+          WiFi::WiFiManager manager(platform);
+          WiFi::WiFiCommandHandler commands;
+          Event::WiFiEventBridge events;
+          void setup() {
+              WiFi::WiFiConfiguration config;
+              config.AccessPoint.SSID = "ESPressio-Test";
+              (void)manager.Configure(config);
+              (void)commands.Initialize(Command::CommandRegistry::GetInstance(), manager);
+              (void)events.Initialize(manager);
+          }
+          void loop() { (void)manager.Poll(); delay(10); }
+          EOF
+      - run: pio run -d project/consumer
