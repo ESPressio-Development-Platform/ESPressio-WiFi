@@ -11,6 +11,7 @@
     "platforms": ["espressif32"],
     "headers": ["ESPressio_WiFi.hpp"],
     "dependencies": {
+        "espressio-development-platform/ESPressio-Observable": ">=3.0.2 <4.0.0",
         "espressio-development-platform/ESPressio-Serializable": ">=0.11.0 <1.0.0"
     }
 }
