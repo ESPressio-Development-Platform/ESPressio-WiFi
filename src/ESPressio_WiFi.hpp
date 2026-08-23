@@ -6,7 +6,7 @@
 
 #include <ESPressio_ThreadSafeObservable.hpp>
 #include "ESPressio_IWiFiObserver.hpp"
-#include "ESPressio_WiFiConfiguration.hpp"
+#include "ESPressio_IWiFiConfigurationStore.hpp"
 
 namespace ESPressio::WiFi {
 
@@ -75,6 +75,40 @@ public:
     const WiFiConfiguration& Configuration() const noexcept { return _configuration; }
     WiFiConfiguration& MutableConfiguration() noexcept { return _configuration; }
     const WiFiRuntimeState& State() const noexcept { return _state; }
+    const std::vector<ScanResult>& LastScanResults() const noexcept { return _lastScanResults; }
+
+    void SetConfigurationStore(IWiFiConfigurationStore* store) noexcept { _configurationStore = store; }
+    IWiFiConfigurationStore* ConfigurationStore() const noexcept { return _configurationStore; }
+
+    WiFiConfigurationStoreResult SaveConfiguration() {
+        if (_configurationStore == nullptr) {
+            return WiFiConfigurationStoreResult::Fail(
+                WiFiConfigurationStoreStatus::NotConfigured,
+                "No WiFi configuration store is configured"
+            );
+        }
+        return _configurationStore->Save(_configuration);
+    }
+
+    WiFiConfigurationStoreResult LoadConfiguration(bool apply = true) {
+        if (_configurationStore == nullptr) {
+            return WiFiConfigurationStoreResult::Fail(
+                WiFiConfigurationStoreStatus::NotConfigured,
+                "No WiFi configuration store is configured"
+            );
+        }
+        WiFiConfiguration loaded;
+        auto result = _configurationStore->Load(loaded);
+        if (!result) return result;
+        _configuration = std::move(loaded);
+        if (apply && _platform.Apply(_configuration) != WiFiStatus::Success) {
+            return WiFiConfigurationStoreResult::Fail(
+                WiFiConfigurationStoreStatus::StorageError,
+                "Configuration loaded but could not be applied to the WiFi platform"
+            );
+        }
+        return result;
+    }
 
     Observable::ObserverHandlePtr RegisterObserver(IWiFiObserver* observer) { return _observable->RegisterObserver(observer); }
     void UnregisterObserver(IWiFiObserver* observer) { _observable->UnregisterObserver(observer); }
@@ -136,8 +170,9 @@ public:
         }
 
         if (!scan.empty()) {
-            if (_scanCallback) _scanCallback(scan);
-            _observable->ScanComplete(scan);
+            _lastScanResults = scan;
+            if (_scanCallback) _scanCallback(_lastScanResults);
+            _observable->ScanComplete(_lastScanResults);
         }
 
         for (const auto& event : events) {
@@ -165,8 +200,10 @@ public:
 
 private:
     IWiFiPlatform& _platform;
+    IWiFiConfigurationStore* _configurationStore = nullptr;
     WiFiConfiguration _configuration{};
     WiFiRuntimeState _state{};
+    std::vector<ScanResult> _lastScanResults;
     std::shared_ptr<ManagerObservable> _observable = std::make_shared<ManagerObservable>();
     ModeCallback _modeCallback;
     ClientCallback _clientCallback;
