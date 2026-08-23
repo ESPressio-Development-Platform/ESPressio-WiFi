@@ -9,7 +9,7 @@
 namespace ESPressio::WiFi {
 
 enum class WiFiMode : uint8_t { Disabled, Client, AccessPoint, AccessPointClient };
-enum class ClientState : uint8_t { Disabled, Idle, Connecting, Connected, Reconnecting, Failed };
+enum class ClientState : uint8_t { Disabled, Idle, Connecting, Connected, Reconnecting, Disconnecting, Disconnected, Failed };
 enum class AccessPointState : uint8_t { Disabled, Starting, Active, Failed };
 enum class ScanState : uint8_t { Idle, Scanning, Complete, Failed };
 enum class NetworkSecurity : uint8_t { Open, WEP, WPA, WPA2, WPA_WPA2, WPA3, WPA2_WPA3, Unknown };
@@ -93,6 +93,8 @@ ESPRESSIO_ENUM_MAPPING(
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Connecting, "connecting"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Connected, "connected"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Reconnecting, "reconnecting"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Disconnecting, "disconnecting"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Disconnected, "disconnected"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::ClientState::Failed, "failed")
 )
 
