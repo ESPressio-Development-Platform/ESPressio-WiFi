@@ -1,96 +1,338 @@
 # ESPressio WiFi
 
-Platform-neutral, event-driven WiFi lifecycle and configuration for ESP32 applications.
+Autonomous, platform-neutral WiFi lifecycle and configuration for ESP32 applications.
 
-## Version — 0.1.0
+## Version — 0.2.0
 
-0.1.0 is the first functional release. The historical manifest-only `1.0.0` value never represented a released implementation and creates no compatibility obligation.
+0.2.0 adds three core capabilities:
+
+- **remembered Client networks with deterministic priority-based automatic selection and failover**;
+- **autonomous WiFi runtime servicing on ESPressio Threads `PrecisionThread`**, removing the need to call `wifi.Poll()` from the application loop;
+- **`APUntilClient` IoT fallback mode**, which exposes an AP only while Client connectivity is unavailable.
+
+WiFi 0.2.0 is validated against the corrected Serializable 0.11.2 cascade: Observable 3.0.2, Serializable 0.11.2, Units 0.2.6, Timing 2.2.7, Threads 3.1.6, Event 6.0.2, Command 1.0.2, Security 0.4.1 and Persistence 0.3.1.
 
 ## What ESPressio WiFi owns
 
-- Access Point, Client and AP+Client operating modes.
+- Access Point, Client, AP+Client and AP-until-Client operating modes.
 - Independent AP and Client runtime state machines.
 - ESPressio-owned IPv4/MAC/network/security/scan types; no Arduino/ESP-IDF types in public APIs.
 - Always-Serializable WiFi configuration.
-- DHCP/static client addressing and AP DHCP-server configuration data.
-- asynchronous scanning.
-- direct callbacks and ESPressio Observable notifications.
-- an explicit ESP32 implementation behind `IWiFiPlatform`.
-- optional Persistence, protected Persistence/Security, Event and Command integrations.
+- Multiple remembered Client network profiles, including credentials, addressing and priority.
+- Automatic scan → select → connect → failover behaviour.
+- Conditional AP fallback and remembered-network retry behaviour for IoT provisioning/recovery.
+- DHCP/static Client addressing and AP DHCP-server configuration data.
+- Asynchronous scanning.
+- Direct callbacks and ESPressio Observable notifications.
+- An explicit ESP32 implementation behind `IWiFiPlatform`.
+- Autonomous runtime execution through ESPressio Threads `PrecisionThread`.
+- Optional Persistence, protected Persistence/Security, Event and Command integrations.
 
-HTTP, WebSocket, browser UI and other Web concerns deliberately belong elsewhere.
+HTTP, Captive Portal, WebSocket, browser UI and other Web concerns deliberately belong in ESPressio Web rather than this library. WiFi owns the lifecycle that makes those facilities reachable; Web owns the user interface.
 
-## Minimal Access Point
+## Installation
 
-WiFi defaults to Access Point mode:
+Core WiFi 0.2.0:
+
+```ini
+lib_deps =
+    espressio-development-platform/ESPressio-WiFi@^0.2.0
+    espressio-development-platform/ESPressio-Observable@^3.0.2
+    espressio-development-platform/ESPressio-Serializable@^0.11.2
+    espressio-development-platform/ESPressio-Threads@^3.1.6
+```
+
+Add Persistence, Security, Event and Command only when selecting those integrations.
+
+## Minimal Access Point — no polling required
 
 ```cpp
 #include <ESPressio_WiFi.hpp>
+#include <ESPressio_WiFiWorker.hpp>
 #include <ESPressio_ESP32WiFi.hpp>
 
 using namespace ESPressio::WiFi;
 
 ESP32WiFiPlatform platform;
 WiFiManager wifi(platform);
+WiFiWorker wifiWorker(wifi);
 
 void setup() {
     WiFiConfiguration config;
+    config.Mode = WiFiMode::AccessPoint;
     config.AccessPoint.SSID = "ESPressio-Device";
     config.AccessPoint.Password = "change-me";
+
     wifi.Configure(config);
+    wifiWorker.Initialize();
+    wifiWorker.Start();
 }
 
 void loop() {
-    wifi.Poll();
+    // ESPressio WiFi requires no application polling.
 }
 ```
 
-## Client and AP+Client modes
+`WiFiWorker` is implemented with ESPressio Threads `PrecisionThread`. Its default service period is 50 ms and its default desired execution budget is 5 ms. Explicit operations such as scans, connects and configuration changes bump the worker so they do not need to wait for the next scheduled iteration.
+
+Runtime scheduling is intentionally separate from persisted WiFi configuration:
+
+```cpp
+WiFiWorkerConfiguration runtime;
+runtime.IterationPeriodMilliseconds = 25;
+runtime.DesiredExecutionBudgetMilliseconds = 5;
+
+WiFiWorker wifiWorker(wifi, runtime);
+```
+
+Thread lifecycle, rate limiting, skipped-iteration accounting and diagnostics remain owned by ESPressio Threads.
+
+## Remembered Client networks
+
+Client mode can persist multiple network profiles. Each profile contains its own SSID, sensitive password, priority, enabled state and DHCP/static addressing configuration.
 
 ```cpp
 WiFiConfiguration config;
 config.Mode = WiFiMode::Client;
 config.Client.Enabled = true;
-config.Client.SSID = "Studio";
-config.Client.Password = "secret";
+
+ClientNetworkProfile home;
+home.SSID = "Home";
+home.Password = "home-password";
+home.Priority = 300;
+
+ClientNetworkProfile studio;
+studio.SSID = "Studio";
+studio.Password = "studio-password";
+studio.Priority = 200;
+
+ClientNetworkProfile hotspot;
+hotspot.SSID = "Phone-Hotspot";
+hotspot.Password = "hotspot-password";
+hotspot.Priority = 100;
+
+config.Client.Networks = { home, studio, hotspot };
+
 wifi.Configure(config);
-wifi.ConnectClient();
+wifiWorker.Initialize();
+wifiWorker.Start();
 ```
 
-For simultaneous AP and Client operation:
+With the default selection policy, ESPressio WiFi automatically scans when Client operation starts, matches visible SSIDs against remembered profiles, ignores disabled/unknown profiles, chooses the highest priority visible profile, uses strongest RSSI to break equal-priority ties, chooses the strongest BSSID for duplicate SSIDs, and advances to the next eligible remembered profile when `TryNextOnFailure` is enabled.
+
+A healthy current Client connection is intentionally **sticky**. A background/manual scan does not disconnect a working network merely because a higher-priority remembered network appears.
+
+## `APUntilClient` — IoT provisioning/recovery mode
+
+`APUntilClient` is intended for devices that should normally join an existing WiFi network, but must remain directly reachable when no usable Client network is available.
+
+```text
+remembered networks exist
+        |
+        v
+   STA-only startup
+        |
+        +---- Client connects ----------------------> STA-only
+        |
+        +---- fallback timeout expires
+                         |
+                         v
+                    AP + STA
+                    fallback AP
+                         |
+                         +---- periodic scan/retry
+                         |
+                         +---- Client connects ------> stop AP -> STA-only
+                                                       |
+                                                       +---- later Client loss
+                                                               |
+                                                               v
+                                                         STA-only retry
+                                                               |
+                                                               +---- timeout -> AP+STA fallback again
+```
+
+If there are **no remembered networks**, the fallback AP starts immediately because there is nothing useful for STA to attempt.
+
+### Basic `APUntilClient` configuration
+
+```cpp
+#include <ESPressio_WiFi.hpp>
+#include <ESPressio_WiFiWorker.hpp>
+#include <ESPressio_ESP32WiFi.hpp>
+
+using namespace ESPressio::WiFi;
+
+ESP32WiFiPlatform platform;
+WiFiManager wifi(platform);
+WiFiWorker wifiWorker(wifi);
+
+void setup() {
+    WiFiConfiguration config;
+    config.Mode = WiFiMode::APUntilClient;
+
+    config.AccessPoint.Enabled = true;
+    config.AccessPoint.SSID = "ESPressio-Setup";
+    config.AccessPoint.Password = "setup-password";
+
+    config.Client.Enabled = true;
+
+    ClientNetworkProfile home;
+    home.SSID = "Home";
+    home.Password = "home-password";
+    home.Priority = 300;
+
+    ClientNetworkProfile studio;
+    studio.SSID = "Studio";
+    studio.Password = "studio-password";
+    studio.Priority = 200;
+
+    config.Client.Networks = { home, studio };
+
+    wifi.Configure(config);
+    wifiWorker.Initialize();
+    wifiWorker.Start();
+}
+
+void loop() {
+    // No WiFi polling required.
+}
+```
+
+At startup WiFi remains STA-only while it scans and attempts remembered networks. If no usable Client connection is established before the fallback timeout, the ESP32 transitions to AP+STA and exposes `ESPressio-Setup` while continuing to look for remembered networks.
+
+### Configurable fallback and retry timing
+
+```cpp
+config.APUntilClient.FallbackTimeoutMilliseconds = 30'000;
+config.APUntilClient.RetryScanIntervalMilliseconds = 30'000;
+```
+
+The defaults are 30 seconds for both values. `FallbackTimeoutMilliseconds` does not apply when there are zero remembered networks: the AP starts immediately. While fallback is active, retries occur in AP+STA so provisioning/control clients are not deliberately dropped merely because STA is scanning again.
+
+### Runtime provisioning
+
+A future ESPressio Web captive portal, a Serial console, or application code can all use the same WiFi-owned remembered-network API:
+
+```cpp
+ClientNetworkProfile network;
+network.SSID = "New-Site-WiFi";
+network.Password = "new-site-password";
+network.Priority = 500;
+
+wifi.AddOrUpdateClientNetwork(network);
+wifi.SaveConfiguration();
+```
+
+In `APUntilClient`, adding or updating a remembered profile triggers an immediate scan/connection attempt. The fallback AP remains available until Client connectivity is actually established, then WiFi shuts the AP down and returns to STA-only.
+
+Equivalent Commands:
+
+```text
+wifi mode ap-until-client
+wifi client networks add "New-Site-WiFi" "new-site-password" 500
+wifi config save
+```
+
+Fallback controls:
+
+```text
+wifi ap-until-client status
+wifi ap-until-client retry-now
+wifi ap-until-client fallback-timeout 30000
+wifi ap-until-client retry-interval 30000
+```
+
+### Observing `APUntilClient`
+
+`WiFiRuntimeState::APUntilClient` exposes `Inactive`, `SeekingClient`, `FallbackAccessPoint`, and `ClientConnected` phases plus fallback/retry timing.
+
+Direct callback:
+
+```cpp
+wifi.OnAPUntilClientStateChanged([](
+    const APUntilClientRuntimeState& before,
+    const APUntilClientRuntimeState& after
+) {
+    Serial.printf(
+        "APUntilClient state %u -> %u, fallback AP=%s\n",
+        static_cast<unsigned>(before.State),
+        static_cast<unsigned>(after.State),
+        after.FallbackAccessPointActive ? "active" : "inactive"
+    );
+});
+```
+
+`IWiFiObserver` exposes the equivalent observer callback. When Event integration is selected, `WiFiEventBridge` registers itself as a WiFi Observer and emits `WiFiAPUntilClientStateChangedEvent` for asynchronous subscribers.
+
+### `APUntilClient` vs `AccessPointClient`
+
+| Mode | Client | Access Point |
+| --- | --- | --- |
+| `Client` | active | off |
+| `AccessPoint` | off | always active |
+| `AccessPointClient` | active | **always active** |
+| `APUntilClient` | active | **only while Client connectivity is unavailable** |
+
+`AccessPointClient` never shuts its AP down merely because the Client connects. `APUntilClient` does exactly that by design.
+
+## Selection policy
+
+```cpp
+config.Client.Selection.AutomaticSelection = true;
+config.Client.Selection.ScanOnStartup = true;
+config.Client.Selection.ScanOnDisconnect = true;
+config.Client.Selection.TryNextOnFailure = true;
+```
+
+All four options default to the behaviour shown above.
+
+## Static addressing per remembered network
+
+```cpp
+ClientNetworkProfile cameraLAN;
+cameraLAN.SSID = "Camera-LAN";
+cameraLAN.Password = "camera-password";
+cameraLAN.Priority = 500;
+cameraLAN.Addressing = AddressMode::Static;
+cameraLAN.StaticNetwork.Address = IPv4Address(192, 168, 50, 20);
+cameraLAN.StaticNetwork.Gateway = IPv4Address(192, 168, 50, 1);
+cameraLAN.StaticNetwork.SubnetMask = IPv4Address(255, 255, 255, 0);
+cameraLAN.StaticNetwork.PrimaryDNS = IPv4Address(1, 1, 1, 1);
+```
+
+DHCP remains the default for every profile.
+
+## Permanent AP + Client
 
 ```cpp
 config.Mode = WiFiMode::AccessPointClient;
 config.AccessPoint.Enabled = true;
+config.AccessPoint.SSID = "ESPressio-Control";
+config.AccessPoint.Password = "control-password";
 config.Client.Enabled = true;
-wifi.Configure(config);
 ```
 
-`WiFiRuntimeState` then reports both independently, for example `AccessPoint.State == Active` while `Client.State == Connecting`.
+`WiFiRuntimeState` reports AP and Client state independently.
 
-## DHCP and static addressing
-
-Client addressing defaults to DHCP. Static addressing is explicit and persistable:
+## Observing remembered-network selection
 
 ```cpp
-config.Client.Addressing = AddressMode::Static;
-config.Client.StaticNetwork.Address = IPv4Address(192, 168, 1, 50);
-config.Client.StaticNetwork.Gateway = IPv4Address(192, 168, 1, 1);
-config.Client.StaticNetwork.SubnetMask = IPv4Address(255, 255, 255, 0);
-config.Client.StaticNetwork.PrimaryDNS = IPv4Address(1, 1, 1, 1);
+wifi.OnClientNetworkSelected([](const ClientNetworkCandidate& selected) {
+    Serial.printf(
+        "Selected %s priority=%u RSSI=%d\n",
+        selected.SSID.c_str(),
+        selected.Priority,
+        selected.RSSI
+    );
+});
+
+wifi.OnClientNoKnownNetworkAvailable([]() {
+    Serial.println("No remembered network is currently visible");
+});
 ```
 
-AP network and DHCP-server settings are separate:
-
-```cpp
-config.AccessPoint.Network.Address = IPv4Address(192, 168, 10, 1);
-config.AccessPoint.DHCP.Enabled = true;
-config.AccessPoint.DHCP.LeaseStart = IPv4Address(192, 168, 10, 10);
-config.AccessPoint.DHCP.LeaseEnd = IPv4Address(192, 168, 10, 100);
-config.AccessPoint.DHCP.LeaseDurationSeconds = 7200;
-```
-
-The ESP32 Arduino backend applies the addressing settings supported by the selected framework; the complete configuration remains persisted even when a particular backend cannot tune every DHCP-server detail directly.
+`IWiFiObserver` exposes `OnClientNetworkSelectionChanged(...)`, `OnClientNetworkSelected(...)`, and `OnClientNoKnownNetworkAvailable()`. The optional WiFi Event bridge emits corresponding Serializable Events.
 
 ## Scanning
 
@@ -105,98 +347,53 @@ wifi.OnScanCompleted([](const std::vector<ScanResult>& networks) {
 wifi.Scan();
 ```
 
-Results contain only ESPressio types: SSID, BSSID, RSSI, channel and security mode.
+The worker services scan completion automatically; no `Poll()` call is required.
 
-## Direct callbacks
-
-AP and Client contexts remain deliberately separate:
+## Managing remembered networks
 
 ```cpp
-wifi.OnClientStateChanged([](const ClientRuntimeState& before,
-                             const ClientRuntimeState& after) {
-    // Client-only transition.
-});
+ClientNetworkProfile profile;
+profile.SSID = "Workshop";
+profile.Password = "workshop-password";
+profile.Priority = 250;
 
-wifi.OnAccessPointStateChanged([](const AccessPointRuntimeState& before,
-                                  const AccessPointRuntimeState& after) {
-    // AP-only transition.
-});
-
-wifi.OnAccessPointStationConnected([](const MacAddress& station) {
-    // A station joined our AP.
-});
+wifi.AddOrUpdateClientNetwork(profile);
+wifi.SetClientNetworkPriority("Workshop", 400);
+wifi.RemoveClientNetwork("Old-Network");
 ```
 
-`OnModeChanged()` reports overall topology changes independently of either subsystem.
-
-## Observable notifications
-
-Implement `IWiFiObserver` and register it with the same manager:
-
-```cpp
-class Observer : public IWiFiObserver {
-public:
-    void OnClientStateChanged(
-        const ClientRuntimeState& before,
-        const ClientRuntimeState& after
-    ) override {
-        // ...
-    }
-};
-
-Observer observer;
-auto handle = wifi.RegisterObserver(&observer);
-```
-
-Observable notifications include mode, AP state, Client state, scan lifecycle/results, AP station joins/leaves, and Client IP acquisition/loss.
-
-## Optional Event bridge
-
-```cpp
-#include <ESPressio_WiFiEventBridge.hpp>
-
-ESPressio::Event::WiFiEventBridge bridge;
-bridge.Initialize(wifi);
-```
-
-The bridge converts Observable notifications into WiFi-owned ESPressio Event types. Event remains optional.
+Call `SaveConfiguration()` when configuration changes should survive reboot.
 
 ## Optional Command handler
 
-```cpp
-#include <ESPressio_WiFiCommandHandler.hpp>
-
-WiFiCommandHandler commands;
-commands.Initialize(
-    ESPressio::Command::CommandRegistry::GetInstance(),
-    wifi
-);
-```
-
-This makes the same control surface usable from ESPressio Serial today and a future browser console later. Representative commands are:
-
 ```text
 wifi status
-wifi mode ap
-wifi mode client
-wifi mode ap-client
+wifi mode ap-until-client
 wifi scan
-wifi client connect
-wifi client disconnect
-wifi client ssid "Studio"
-wifi client password "secret"
-wifi ap start
-wifi ap stop
-wifi ap ssid "ESPressio-Lab"
-wifi ap password "secret"
-wifi ap channel 6
+wifi scan results
+
+wifi client status
+wifi client auto-select true
+wifi client networks list
+wifi client networks add "Home" "home-password" 300
+wifi client networks add "Studio" "studio-password" 200
+wifi client networks priority "Studio" 400
+wifi client networks remove "Old-Network"
+
+wifi ap-until-client status
+wifi ap-until-client retry-now
+wifi ap-until-client fallback-timeout 30000
+wifi ap-until-client retry-interval 30000
+
+wifi config save
+wifi config load
 ```
 
-There is intentionally no command for reading a password back. Credentials may be set, never emitted.
+`wifi client networks list` reports SSID, priority, enabled state and addressing mode but **never returns plaintext passwords**.
 
-## Persisting configuration
+## Persistence
 
-Configuration is Serializable by design. Persistence remains opt-in and provider-neutral:
+The complete `WiFiConfiguration`, including remembered profiles and `APUntilClient` timing, can be stored through developer-selected ESPressio Persistence providers:
 
 ```cpp
 #include <ESPressio_WiFiPersistence.hpp>
@@ -205,11 +402,11 @@ WiFiConfigurationStore::Save(storage, "/wifi.espb", config);
 WiFiConfigurationStore::Load(storage, "/wifi.espb", config);
 ```
 
-The same helpers accept `IKeyValueStorage`, so Preferences/NVS works without WiFi knowing that NVS exists.
+WiFi 0.2.0 validates this optional integration against Persistence 0.3.1.
 
-## Protecting the complete configuration
+## Protecting remembered credentials
 
-Passwords are marked Sensitive for redaction, but redaction is not encryption. For persisted credentials, authenticated protection is strongly recommended:
+Each password is Sensitive/redacted Serializable data. For persisted credentials, authenticated whole-configuration protection is strongly recommended:
 
 ```cpp
 #include <ESPressio_WiFiPersistenceSecurity.hpp>
@@ -226,49 +423,33 @@ ProtectedWiFiConfigurationStore::Save(
 );
 ```
 
-Protection covers the entire serialized configuration, not just passwords. WiFi never chooses the cipher or owns key material; those responsibilities remain in ESPressio Security.
+Protected persistence is validated against Serializable 0.11.2, Persistence 0.3.1 and Security 0.4.1. WiFi never chooses the cipher or owns key material.
 
-## Compile-time extensible configuration
+## Thread safety
 
-Applications can persist WiFi settings together with application-specific settings without modifying ESPressio WiFi.
+WiFi 0.2.0 treats `WiFiManager` as a concurrently accessed service. Configuration, runtime state, scan results, remembered profiles and selection state are synchronized internally.
 
-```cpp
-#include <ESPressio_ExtensibleWiFiConfiguration.hpp>
+Callbacks and Observers are invoked **after internal state locks are released**, so notifications may safely call back into WiFi without being invoked beneath the manager state mutex. `Configuration()`, `State()`, `LastScanResults()` and `EligibleClientNetworks()` return snapshots rather than exposing mutable internal references.
 
-struct MyNetworkExtras final
-    : ESPressio::Serializable::Serializable<MyNetworkExtras> {
-    ESPRESSIO_SERIALIZABLE_TYPE(MyNetworkExtras)
-    uint16_t DiscoveryPort = 9000;
-    ESPRESSIO_SERIALIZABLE_PROPERTIES(
-        ESPRESSIO_PROPERTY("discoveryPort", DiscoveryPort)
-    )
-};
+## `ProcessOnce()` and legacy `Poll()`
 
-using MyConfiguration = WiFiConfigurationWith<MyNetworkExtras>;
+`WiFiManager::ProcessOnce()` remains public for deterministic tests and specialist integrations. `Poll()` is retained as a 0.1.x compatibility alias. Normal applications should use `WiFiWorker` and should not service either function manually.
 
-ConfiguredWiFiManager<MyConfiguration> wifi(platform);
-MyConfiguration config;
-config.WiFi.AccessPoint.SSID = "Camera-Control";
-config.Extension.DiscoveryPort = 9100;
-wifi.Configure(config);
-```
-
-`WiFiConfigurationStore` and `ProtectedWiFiConfigurationStore` are templated, so the whole extended object can be persisted/protected as one document. The hardware implementation receives only the standard `config.WiFi` section.
-
-## Dependency direction
+## Dependencies
 
 ```text
-WiFi 0.1.0
+WiFi 0.2.0
     -> Observable >= 3.0.2 < 4.0.0
-    -> Serializable >= 0.11.0 < 1.0.0
+    -> Serializable >= 0.11.2 < 1.0.0
+    -> Threads >= 3.1.6 < 4.0.0
 
 optional
-    - - -> Persistence >= 0.3.0 < 1.0.0
-    - - -> Security >= 0.4.0 < 1.0.0 (through protected serialization)
-    - - -> Event >= 6.0.1 < 7.0.0
-    - - -> Command >= 1.0.1 < 2.0.0
+    - - -> Persistence >= 0.3.1 < 1.0.0
+    - - -> Security >= 0.4.1 < 1.0.0
+    - - -> Event >= 6.0.2 < 7.0.0
+    - - -> Command >= 1.0.2 < 2.0.0
 ```
 
-Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
+Threads is required because autonomous WiFi servicing is core 0.2.0 behaviour. Event, Command, Persistence and Security remain opt-in. Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
 
 See `ESPRESSIO_DEPENDENCY_CHART.md` and `CHANGELOG.md` for the coordinated platform position and release history.

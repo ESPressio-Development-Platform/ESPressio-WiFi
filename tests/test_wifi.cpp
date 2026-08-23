@@ -8,33 +8,31 @@ class FakePlatform final : public IWiFiPlatform {
 public:
     WiFiStatus Apply(const WiFiConfiguration& config) override { configured=config; state.Mode=config.Mode; state.Revision++; return WiFiStatus::Success; }
     WiFiStatus Disable() override { state.Mode=WiFiMode::Disabled; state.Revision++; return WiFiStatus::Success; }
-    WiFiStatus ConnectClient() override { state.Client.State=ClientState::Connecting; state.Revision++; return WiFiStatus::Success; }
+    WiFiStatus ConnectClient() override { state.Client.State=ClientState::Connecting; state.Revision++; legacyConnects++; return WiFiStatus::Success; }
+    WiFiStatus ConnectClient(const ClientNetworkProfile& profile) override { connectedProfiles.push_back(profile.SSID); state.Client.State=ClientState::Connecting; state.Client.SSID=profile.SSID; state.Revision++; return WiFiStatus::Success; }
     WiFiStatus DisconnectClient() override { state.Client.State=ClientState::Disconnected; state.Revision++; return WiFiStatus::Success; }
-    WiFiStatus StartAccessPoint() override { state.AccessPoint.State=AccessPointState::Active; state.Revision++; return WiFiStatus::Success; }
-    WiFiStatus StopAccessPoint() override { state.AccessPoint.State=AccessPointState::Disabled; state.Revision++; return WiFiStatus::Success; }
-    WiFiStatus StartScan() override { state.Scan=ScanState::Scanning; state.Revision++; return WiFiStatus::Success; }
+    WiFiStatus StartAccessPoint() override { state.AccessPoint.State=AccessPointState::Active; state.Revision++; apStarts++; return WiFiStatus::Success; }
+    WiFiStatus StopAccessPoint() override { state.AccessPoint.State=AccessPointState::Disabled; state.Revision++; apStops++; return WiFiStatus::Success; }
+    WiFiStatus StartScan() override { state.Scan=ScanState::Scanning; state.Revision++; scanStarts++; return WiFiStatus::Success; }
     WiFiStatus Poll(WiFiRuntimeState& output,std::vector<ScanResult>* scans,std::vector<WiFiPlatformEvent>* events) override {
         output=state;
-        if (deliverScan && scans) {
-            ScanResult r; r.SSID="Lab"; r.RSSI=-42; r.Channel=6; r.Security=NetworkSecurity::WPA2;
-            scans->push_back(r); deliverScan=false;
-        }
+        if (deliverScan && scans) { *scans=nextScan; deliverScan=false; }
         if (!pending.empty() && events) { *events=pending; pending.clear(); }
         return WiFiStatus::Success;
     }
     WiFiConfiguration configured{};
     WiFiRuntimeState state{};
     bool deliverScan=false;
+    int legacyConnects=0,scanStarts=0,apStarts=0,apStops=0;
+    std::vector<ScanResult> nextScan;
+    std::vector<std::string> connectedProfiles;
     std::vector<WiFiPlatformEvent> pending;
 };
 
 class FakeStore final : public IWiFiConfigurationStore {
 public:
     WiFiConfigurationStoreResult Save(const WiFiConfiguration& value) override { saved=value; has=true; saves++; return WiFiConfigurationStoreResult::Ok(); }
-    WiFiConfigurationStoreResult Load(WiFiConfiguration& value) override {
-        if (!has) return WiFiConfigurationStoreResult::Fail(WiFiConfigurationStoreStatus::NotFound,"missing");
-        value=saved; loads++; return WiFiConfigurationStoreResult::Ok();
-    }
+    WiFiConfigurationStoreResult Load(WiFiConfiguration& value) override { if (!has) return WiFiConfigurationStoreResult::Fail(WiFiConfigurationStoreStatus::NotFound,"missing"); value=saved; loads++; return WiFiConfigurationStoreResult::Ok(); }
     WiFiConfiguration saved{}; bool has=false; int saves=0,loads=0;
 };
 
@@ -42,87 +40,164 @@ class Observer final : public IWiFiObserver {
 public:
     void OnWiFiModeChanged(WiFiMode,WiFiMode) override { modes++; }
     void OnClientStateChanged(const ClientRuntimeState&,const ClientRuntimeState&) override { clients++; }
-    void OnAccessPointStateChanged(const AccessPointRuntimeState&,const AccessPointRuntimeState&) override { aps++; }
-    void OnScanStateChanged(ScanState,ScanState) override { scanStates++; }
-    void OnScanCompleted(const std::vector<ScanResult>& r) override { scans += static_cast<int>(r.size()); }
-    void OnAccessPointStationConnected(const MacAddress&) override { joined++; }
-    void OnAccessPointStationDisconnected(const MacAddress&) override { left++; }
-    void OnClientIPAddressAcquired(const NetworkAddress&) override { ips++; }
-    void OnClientIPAddressLost() override { ipLost++; }
-    int modes=0,clients=0,aps=0,scanStates=0,scans=0,joined=0,left=0,ips=0,ipLost=0;
+    void OnAPUntilClientStateChanged(const APUntilClientRuntimeState&,const APUntilClientRuntimeState& after) override { apUntilClientChanges++; apUntilClientStates.push_back(after.State); }
+    void OnScanCompleted(const std::vector<ScanResult>& r) override { scanCompletions++; scans += static_cast<int>(r.size()); }
+    void OnClientNetworkSelectionChanged(const ClientNetworkSelectionRuntimeState&,const ClientNetworkSelectionRuntimeState&) override { selectionChanges++; }
+    void OnClientNetworkSelected(const ClientNetworkCandidate& c) override { selected.push_back(c.SSID); selectedRSSI.push_back(c.RSSI); }
+    void OnClientNoKnownNetworkAvailable() override { noKnown++; }
+    int modes=0,clients=0,scanCompletions=0,scans=0,selectionChanges=0,noKnown=0,apUntilClientChanges=0;
+    std::vector<std::string> selected;
+    std::vector<int32_t> selectedRSSI;
+    std::vector<APUntilClientState> apUntilClientStates;
 };
 
-int main() {
-    FakePlatform platform;
-    WiFiManager wifi(platform);
-    Observer observer;
-    auto handle=wifi.RegisterObserver(&observer);
-    assert(handle);
+static ScanResult Visible(const char* ssid,int rssi,uint8_t channel) {
+    ScanResult result; result.SSID=ssid; result.RSSI=rssi; result.Channel=channel; result.Security=NetworkSecurity::WPA2; return result;
+}
 
-    int directScanStates=0,directIP=0,directLost=0;
-    wifi.OnScanStateChanged([&](ScanState,ScanState){ directScanStates++; });
-    wifi.OnClientIPAddressAcquired([&](const NetworkAddress&){ directIP++; });
-    wifi.OnClientIPAddressLost([&](){ directLost++; });
-
+static WiFiConfiguration AutomaticConfig(WiFiMode mode=WiFiMode::AccessPointClient) {
     WiFiConfiguration config;
-    assert(config.Mode==WiFiMode::AccessPoint);
-    config.Mode=WiFiMode::AccessPointClient;
+    config.Mode=mode;
     config.AccessPoint.SSID="lab-ap";
+    config.AccessPoint.Password="password123";
     config.Client.Enabled=true;
-    config.Client.SSID="lab-sta";
-    config.AccessPoint.DHCP.LeaseStart=IPv4Address(192,168,4,20);
-    config.Reconnect.BackoffMultiplier=2.0f;
-    assert(wifi.Configure(config)==WiFiStatus::Success);
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.modes==1);
+    config.Client.Selection.AutomaticSelection=true;
+    config.Client.Selection.ScanOnStartup=true;
+    config.Client.Selection.ScanOnDisconnect=true;
+    config.Client.Selection.TryNextOnFailure=true;
+    return config;
+}
 
-    assert(wifi.ConnectClient()==WiFiStatus::Success);
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.clients==1);
+int main() {
+    {
+        FakePlatform platform;
+        WiFiManager wifi(platform);
+        Observer observer;
+        auto handle=wifi.RegisterObserver(&observer);
+        assert(handle);
 
-    assert(wifi.StartAccessPoint()==WiFiStatus::Success);
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.aps==1);
+        auto config=AutomaticConfig();
+        ClientNetworkProfile preferred; preferred.SSID="Preferred"; preferred.Password="preferred-pass"; preferred.Priority=300;
+        ClientNetworkProfile backup; backup.SSID="Backup"; backup.Password="backup-pass"; backup.Priority=100;
+        config.Client.Networks={backup,preferred};
 
-    assert(wifi.Scan()==WiFiStatus::Success);
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.scanStates>=1 && directScanStates>=1);
-    platform.deliverScan=true;
-    platform.state.Scan=ScanState::Complete;
-    platform.state.Revision++;
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.scans==1);
-    assert(wifi.LastScanResults().size()==1);
-    assert(wifi.LastScanResults()[0].SSID=="Lab");
+        assert(wifi.Configure(config)==WiFiStatus::Success);
+        assert(platform.scanStarts==1);
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(observer.modes==1);
 
-    NetworkAddress network;
-    network.Address=IPv4Address(10,0,0,2);
-    network.Gateway=IPv4Address(10,0,0,1);
-    network.SubnetMask=IPv4Address(255,255,255,0);
-    WiFiPlatformEvent joined; joined.Kind=WiFiPlatformEventKind::AccessPointStationConnected;
-    WiFiPlatformEvent ip; ip.Kind=WiFiPlatformEventKind::ClientIPAddressAcquired; ip.Network=network;
-    platform.pending={joined,ip};
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.joined==1 && observer.ips==1 && directIP==1);
+        platform.nextScan={Visible("Backup",-30,1),Visible("Preferred",-70,11)};
+        platform.deliverScan=true; platform.state.Scan=ScanState::Complete; platform.state.Revision++;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(platform.connectedProfiles.size()==1 && platform.connectedProfiles[0]=="Preferred");
+        assert(observer.selected.back()=="Preferred");
+        auto eligible=wifi.EligibleClientNetworks();
+        assert(eligible.size()==2 && eligible[0].SSID=="Preferred" && eligible[1].SSID=="Backup");
 
-    WiFiPlatformEvent left; left.Kind=WiFiPlatformEventKind::AccessPointStationDisconnected;
-    WiFiPlatformEvent lost; lost.Kind=WiFiPlatformEventKind::ClientIPAddressLost;
-    platform.pending={left,lost};
-    assert(wifi.Poll()==WiFiStatus::Success);
-    assert(observer.left==1 && observer.ipLost==1 && directLost==1);
+        platform.state.Client.State=ClientState::Failed; platform.state.Revision++;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(platform.connectedProfiles.size()==2 && platform.connectedProfiles[1]=="Backup");
 
-    FakeStore store;
-    wifi.SetConfigurationStore(&store);
-    assert(wifi.SaveConfiguration());
-    assert(store.saves==1);
-    auto changed=wifi.Configuration();
-    changed.Hostname="changed";
-    assert(wifi.Configure(changed)==WiFiStatus::Success);
-    assert(wifi.LoadConfiguration(false));
-    assert(store.loads==1);
-    assert(wifi.Configuration().Hostname!="changed");
+        platform.state.Client.State=ClientState::Connected; platform.state.Client.SSID="Backup"; platform.state.Revision++;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(wifi.State().Client.Selection.State==ClientNetworkSelectionState::Connected);
 
-    assert(wifi.Configuration().AccessPoint.SSID=="lab-ap");
-    assert(wifi.Configuration().AccessPoint.DHCP.LeaseStart==IPv4Address(192,168,4,20));
+        assert(wifi.Scan()==WiFiStatus::Success);
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        platform.nextScan={Visible("Preferred",-20,6),Visible("Backup",-80,11)};
+        platform.deliverScan=true; platform.state.Scan=ScanState::Complete; platform.state.Revision++;
+        const auto connectsBeforeStickyScan=platform.connectedProfiles.size();
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(platform.connectedProfiles.size()==connectsBeforeStickyScan);
+
+        platform.state.Client.State=ClientState::Disconnected; platform.state.Revision++;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(platform.scanStarts>=3);
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        platform.nextScan={Visible("Preferred",-80,1),Visible("Preferred",-40,6),Visible("Backup",-20,11)};
+        platform.deliverScan=true; platform.state.Scan=ScanState::Complete; platform.state.Revision++;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(observer.selected.back()=="Preferred");
+        assert(observer.selectedRSSI.back()==-40);
+
+        // HandleCompletedScan() initiated a connection and the fake platform is now
+        // Connecting. Poll that intermediate state before simulating a disconnect;
+        // otherwise the manager would correctly observe Disconnected -> Disconnected
+        // and have no state transition on which to trigger ScanOnDisconnect.
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(wifi.State().Client.State==ClientState::Connecting);
+
+        platform.state.Client.State=ClientState::Disconnected; platform.state.Revision++;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        platform.nextScan.clear(); platform.deliverScan=true; platform.state.Scan=ScanState::Complete; platform.state.Revision++;
+        const int completionsBeforeEmpty=observer.scanCompletions;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(observer.scanCompletions==completionsBeforeEmpty+1);
+        assert(observer.noKnown==1);
+        assert(wifi.LastScanResults().empty());
+        assert(wifi.State().Client.Selection.State==ClientNetworkSelectionState::NoKnownNetworkAvailable);
+
+        assert(wifi.SetClientNetworkPriority("Backup",500));
+        assert(wifi.RemoveClientNetwork("Preferred"));
+        ClientNetworkProfile replacement; replacement.SSID="Third"; replacement.Password="third-pass"; replacement.Priority=250;
+        assert(wifi.AddOrUpdateClientNetwork(replacement));
+
+        FakeStore store; wifi.SetConfigurationStore(&store);
+        assert(wifi.SaveConfiguration());
+        assert(store.saves==1 && store.saved.Client.Networks.size()==2);
+        auto changed=wifi.Configuration(); changed.Hostname="changed";
+        assert(wifi.Configure(changed)==WiFiStatus::Success);
+        assert(wifi.LoadConfiguration(false));
+        assert(store.loads==1);
+    }
+
+    {
+        FakePlatform platform;
+        WiFiManager wifi(platform);
+        Observer observer;
+        auto handle=wifi.RegisterObserver(&observer); assert(handle);
+        auto config=AutomaticConfig(WiFiMode::APUntilClient);
+        config.APUntilClient.FallbackTimeoutMilliseconds=100;
+        config.APUntilClient.RetryScanIntervalMilliseconds=50;
+        assert(wifi.Configure(config)==WiFiStatus::Success);
+        assert(platform.apStarts==1);
+        assert(wifi.State().APUntilClient.FallbackAccessPointActive);
+        ClientNetworkProfile home; home.SSID="Home"; home.Password="home-pass"; home.Priority=200;
+        assert(wifi.AddOrUpdateClientNetwork(home));
+        assert(platform.scanStarts>=1);
+    }
+
+    {
+        uint64_t now=1000;
+        FakePlatform platform;
+        WiFiManager wifi(platform,[&](){ return now; });
+        Observer observer;
+        auto handle=wifi.RegisterObserver(&observer); assert(handle);
+        auto config=AutomaticConfig(WiFiMode::APUntilClient);
+        ClientNetworkProfile home; home.SSID="Home"; home.Password="home-pass"; home.Priority=200; config.Client.Networks={home};
+        config.APUntilClient.FallbackTimeoutMilliseconds=100;
+        config.APUntilClient.RetryScanIntervalMilliseconds=50;
+        assert(wifi.Configure(config)==WiFiStatus::Success);
+        assert(wifi.State().APUntilClient.State==APUntilClientState::SeekingClient);
+        assert(platform.apStarts==0);
+        now=1101;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(platform.apStarts==1);
+        assert(wifi.State().APUntilClient.FallbackAccessPointActive);
+        const auto scansBeforeRetry=platform.scanStarts;
+        now=1152;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(platform.scanStarts>scansBeforeRetry);
+        platform.nextScan={Visible("Home",-30,6)}; platform.deliverScan=true; platform.state.Scan=ScanState::Complete; platform.state.Revision++;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        platform.state.Client.State=ClientState::Connected; platform.state.Client.SSID="Home"; platform.state.Revision++;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(platform.apStops==1);
+        assert(!wifi.State().APUntilClient.FallbackAccessPointActive);
+        assert(wifi.State().APUntilClient.State==APUntilClientState::ClientConnected);
+        assert(observer.apUntilClientChanges>0);
+    }
+
     return 0;
 }

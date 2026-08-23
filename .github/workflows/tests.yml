@@ -2,7 +2,7 @@ name: WiFi Tests
 
 on:
   push:
-    branches: [main, 'feature/**']
+    branches: [main, 'feature/**', 'chore/**']
   pull_request:
     branches: [main]
 
@@ -28,25 +28,38 @@ jobs:
       - name: Create integration consumer
         run: |
           mkdir -p project/consumer/src
+          cat > project/consumer/network_include.py <<'EOF'
+          Import("env")
+          framework = env.PioPlatform().get_package_dir("framework-arduinoespressif32")
+          env.Append(CPPPATH=[framework + "/libraries/Network/src"])
+          EOF
           cat > project/consumer/platformio.ini <<'EOF'
           [env:esp32]
           platform = https://github.com/pioarduino/platform-espressif32/releases/download/55.03.311/platform-espressif32.zip
           board = esp32dev
           framework = arduino
-          build_flags = -std=gnu++17
-          build_unflags = -std=gnu++11
+          extra_scripts = pre:network_include.py
+          build_flags = -std=gnu++17 -frtti
+          build_unflags = -std=gnu++11 -fno-rtti
+          lib_ldf_mode = deep+
           lib_deps =
               ../ESPressio-WiFi
               https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#3.0.2
-              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#6.0.1
-              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#1.0.1
+              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#bugfix/23-serializable-value-composition
+              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#0.2.6
+              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#2.2.7
+              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#3.1.6
+              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#0.3.1
+              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#0.4.1
+              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#6.0.2
+              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#1.0.2
           EOF
           cat > project/consumer/src/main.cpp <<'EOF'
           #include <Arduino.h>
+          #include <Network.h>
+          #include <WiFi.h>
           #include <ESPressio_ESP32WiFi.hpp>
+          #include <ESPressio_WiFiWorker.hpp>
           #include <ESPressio_WiFiPersistence.hpp>
           #include <ESPressio_WiFiPersistenceSecurity.hpp>
           #include <ESPressio_WiFiEventBridge.hpp>
@@ -54,15 +67,25 @@ jobs:
           using namespace ESPressio;
           WiFi::ESP32WiFiPlatform platform;
           WiFi::WiFiManager manager(platform);
+          WiFi::WiFiWorker worker(manager);
           WiFi::WiFiCommandHandler commands;
           Event::WiFiEventBridge events;
           void setup() {
               WiFi::WiFiConfiguration config;
+              config.Mode = WiFi::WiFiMode::APUntilClient;
               config.AccessPoint.SSID = "ESPressio-Test";
+              config.Client.Enabled = true;
+              WiFi::ClientNetworkProfile preferred;
+              preferred.SSID = "Preferred";
+              preferred.Password = "password123";
+              preferred.Priority = 200;
+              config.Client.Networks.push_back(preferred);
               (void)manager.Configure(config);
               (void)commands.Initialize(Command::CommandRegistry::GetInstance(), manager);
               (void)events.Initialize(manager);
+              (void)worker.Initialize();
+              (void)worker.Start();
           }
-          void loop() { (void)manager.Poll(); delay(10); }
+          void loop() { delay(1000); }
           EOF
       - run: pio run -d project/consumer
