@@ -9,6 +9,8 @@
 
 namespace ESPressio::WiFi {
 
+// APUntilClient is a conditional fallback mode: STA is preferred, while the AP
+// is exposed only until Client connectivity succeeds.
 enum class WiFiMode : uint8_t { Disabled, Client, AccessPoint, AccessPointClient, APUntilClient };
 enum class ClientState : uint8_t { Disabled, Idle, Connecting, Connected, Reconnecting, Disconnecting, Disconnected, Failed };
 enum class AccessPointState : uint8_t { Disabled, Starting, Active, Failed };
