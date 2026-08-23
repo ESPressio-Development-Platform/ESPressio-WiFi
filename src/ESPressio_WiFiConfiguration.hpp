@@ -21,7 +21,26 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
         ESPRESSIO_PROPERTY("enabled", Enabled),
         ESPRESSIO_PROPERTY("ssid", SSID),
-        ESPRESSIO_PROPERTY_SENSITIVE("password", Password)
+        ESPRESSIO_PROPERTY_SENSITIVE("password", Password),
+        ESPRESSIO_PROPERTY("addressing", Addressing),
+        ESPRESSIO_PROPERTY("staticNetwork", StaticNetwork)
+    )
+};
+
+struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConfiguration> {
+    ESPRESSIO_SERIALIZABLE_TYPE(DHCPServerConfiguration)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+
+    bool Enabled = true;
+    IPv4Address LeaseStart{192, 168, 4, 2};
+    IPv4Address LeaseEnd{192, 168, 4, 100};
+    uint32_t LeaseDurationSeconds = 7200;
+
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("enabled", Enabled),
+        ESPRESSIO_PROPERTY("leaseStart", LeaseStart),
+        ESPRESSIO_PROPERTY("leaseEnd", LeaseEnd),
+        ESPRESSIO_PROPERTY("leaseDurationSeconds", LeaseDurationSeconds)
     )
 };
 
@@ -35,8 +54,14 @@ struct AccessPointConfiguration final : Serializable::Serializable<AccessPointCo
     uint8_t Channel = 1;
     bool Hidden = false;
     uint8_t MaximumClients = 4;
-    NetworkAddress Network{{{192, 168, 4, 1}}, {{192, 168, 4, 1}}, {{255, 255, 255, 0}}, {}, {}};
-    bool DHCPServerEnabled = true;
+    NetworkAddress Network{};
+    DHCPServerConfiguration DHCP{};
+
+    AccessPointConfiguration() {
+        Network.Address = IPv4Address(192, 168, 4, 1);
+        Network.Gateway = IPv4Address(192, 168, 4, 1);
+        Network.SubnetMask = IPv4Address(255, 255, 255, 0);
+    }
 
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
         ESPRESSIO_PROPERTY("enabled", Enabled),
@@ -45,7 +70,8 @@ struct AccessPointConfiguration final : Serializable::Serializable<AccessPointCo
         ESPRESSIO_PROPERTY("channel", Channel),
         ESPRESSIO_PROPERTY("hidden", Hidden),
         ESPRESSIO_PROPERTY("maximumClients", MaximumClients),
-        ESPRESSIO_PROPERTY("dhcpServerEnabled", DHCPServerEnabled)
+        ESPRESSIO_PROPERTY("network", Network),
+        ESPRESSIO_PROPERTY("dhcp", DHCP)
     )
 };
 
@@ -79,6 +105,7 @@ struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
     bool PowerSave = false;
 
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("mode", Mode),
         ESPRESSIO_PROPERTY("hostname", Hostname),
         ESPRESSIO_PROPERTY("client", Client),
         ESPRESSIO_PROPERTY("accessPoint", AccessPoint),
