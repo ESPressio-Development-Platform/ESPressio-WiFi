@@ -50,6 +50,29 @@ public:
     )
 };
 
+class WiFiAPUntilClientStateChangedEvent final : public SerializableEvent<WiFiAPUntilClientStateChangedEvent> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiAPUntilClientStateChangedEvent)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+public:
+    WiFi::APUntilClientState Before = WiFi::APUntilClientState::Inactive;
+    WiFi::APUntilClientState After = WiFi::APUntilClientState::Inactive;
+    bool FallbackAccessPointActive = false;
+    uint64_t FallbackDeadlineMilliseconds = 0;
+    uint64_t NextRetryMilliseconds = 0;
+    WiFiAPUntilClientStateChangedEvent() = default;
+    WiFiAPUntilClientStateChangedEvent(
+        const WiFi::APUntilClientRuntimeState& before,
+        const WiFi::APUntilClientRuntimeState& after
+    ) : Before(before.State), After(after.State), FallbackAccessPointActive(after.FallbackAccessPointActive),
+        FallbackDeadlineMilliseconds(after.FallbackDeadlineMilliseconds), NextRetryMilliseconds(after.NextRetryMilliseconds) {}
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("before", Before), ESPRESSIO_PROPERTY("after", After),
+        ESPRESSIO_PROPERTY("fallbackAccessPointActive", FallbackAccessPointActive),
+        ESPRESSIO_PROPERTY("fallbackDeadlineMilliseconds", FallbackDeadlineMilliseconds),
+        ESPRESSIO_PROPERTY("nextRetryMilliseconds", NextRetryMilliseconds)
+    )
+};
+
 class WiFiScanStateChangedEvent final : public SerializableEvent<WiFiScanStateChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiScanStateChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
