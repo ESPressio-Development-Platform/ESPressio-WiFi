@@ -7,7 +7,7 @@ using namespace ESPressio::WiFi;
 
 int main() {
     WiFiConfiguration source;
-    source.Mode = WiFiMode::AccessPointClient;
+    source.Mode = WiFiMode::APUntilClient;
     source.Hostname = "camera-controller";
     source.AccessPoint.SSID = "Camera-Control";
     source.AccessPoint.Password = "ap-password";
@@ -18,6 +18,8 @@ int main() {
     source.Client.Enabled = true;
     source.Client.Selection.AutomaticSelection = true;
     source.Client.Selection.ScanOnStartup = true;
+    source.APUntilClient.FallbackTimeoutMilliseconds = 45000;
+    source.APUntilClient.RetryScanIntervalMilliseconds = 15000;
 
     ClientNetworkProfile studio;
     studio.SSID = "Studio";
@@ -49,7 +51,7 @@ int main() {
     const auto result = restored.DeserializeDetailed(loadedArchive);
     assert(result.Success());
 
-    assert(restored.Mode == WiFiMode::AccessPointClient);
+    assert(restored.Mode == WiFiMode::APUntilClient);
     assert(restored.Hostname == "camera-controller");
     assert(restored.AccessPoint.SSID == "Camera-Control");
     assert(restored.AccessPoint.Password == "ap-password");
@@ -65,6 +67,8 @@ int main() {
     assert(restored.Client.Networks[0].Addressing == AddressMode::Static);
     assert(restored.Client.Networks[0].StaticNetwork.Address == IPv4Address(192,168,1,50));
     assert(restored.Client.Networks[1].SSID == "Mobile");
+    assert(restored.APUntilClient.FallbackTimeoutMilliseconds == 45000);
+    assert(restored.APUntilClient.RetryScanIntervalMilliseconds == 15000);
     assert(restored.Reconnect.MaximumAttempts == 7);
     assert(restored.TxPowerDbm == 15);
     assert(restored.PowerSave);
@@ -72,9 +76,11 @@ int main() {
     const auto apProperties = AccessPointConfiguration::GetSerializableProperties();
     const auto clientProperties = ClientConfiguration::GetSerializableProperties();
     const auto profileProperties = ClientNetworkProfile::GetSerializableProperties();
+    const auto fallbackProperties = APUntilClientConfiguration::GetSerializableProperties();
     static_assert(std::tuple_size<decltype(apProperties)>::value >= 3, "AP schema missing properties");
     static_assert(std::tuple_size<decltype(clientProperties)>::value >= 6, "Client schema missing remembered networks");
     static_assert(std::tuple_size<decltype(profileProperties)>::value >= 2, "Profile schema missing properties");
+    static_assert(std::tuple_size<decltype(fallbackProperties)>::value == 2, "APUntilClient schema missing properties");
     assert(std::get<2>(apProperties).IsSensitive());
     assert(std::get<2>(clientProperties).IsSensitive());
     assert(std::get<1>(profileProperties).IsSensitive());
