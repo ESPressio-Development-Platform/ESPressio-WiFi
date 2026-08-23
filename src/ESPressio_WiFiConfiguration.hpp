@@ -151,32 +151,15 @@ struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
     )
 };
 
-struct ProvisioningConfiguration final : Serializable::Serializable<ProvisioningConfiguration> {
-    ESPRESSIO_SERIALIZABLE_TYPE(ProvisioningConfiguration)
-    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
-
-    // Time allowed to recover Client connectivity after it has been lost before
-    // the setup/recovery AP is restored. Zero means immediate AP fallback.
-    uint32_t AccessPointFallbackTimeoutMilliseconds = 30000;
-
-    ESPRESSIO_SERIALIZABLE_PROPERTIES(
-        ESPRESSIO_PROPERTY(
-            "accessPointFallbackTimeoutMilliseconds",
-            AccessPointFallbackTimeoutMilliseconds
-        )
-    )
-};
-
 struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiConfiguration)
-    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(3)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(2)
 
     WiFiMode Mode = WiFiMode::AccessPoint;
     std::string Hostname = "espressio";
     ClientConfiguration Client{};
     AccessPointConfiguration AccessPoint{};
     ReconnectPolicy Reconnect{};
-    ProvisioningConfiguration Provisioning{};
     int8_t TxPowerDbm = 20;
     bool PowerSave = false;
 
@@ -186,7 +169,6 @@ struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
         ESPRESSIO_PROPERTY("client", Client),
         ESPRESSIO_PROPERTY("accessPoint", AccessPoint),
         ESPRESSIO_PROPERTY("reconnect", Reconnect),
-        ESPRESSIO_PROPERTY("provisioning", Provisioning),
         ESPRESSIO_PROPERTY("txPowerDbm", TxPowerDbm),
         ESPRESSIO_PROPERTY("powerSave", PowerSave)
     )
@@ -196,10 +178,7 @@ struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
         uint32_t fromVersion,
         uint32_t toVersion
     ) {
-        return
-            (fromVersion == 1 && toVersion == 2) ||
-            (fromVersion == 2 && toVersion == 3) ||
-            (fromVersion == 1 && toVersion == 3);
+        return fromVersion == 1 && toVersion == 2;
     }
 };
 
