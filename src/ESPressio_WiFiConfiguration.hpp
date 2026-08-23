@@ -12,6 +12,7 @@ namespace ESPressio::WiFi {
 struct ClientNetworkProfile final : Serializable::Serializable<ClientNetworkProfile> {
     ESPRESSIO_SERIALIZABLE_TYPE(ClientNetworkProfile)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~ClientNetworkProfile() = default;
 
     std::string SSID;
     std::string Password;
@@ -34,6 +35,7 @@ struct ClientNetworkSelectionConfiguration final
     : Serializable::Serializable<ClientNetworkSelectionConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(ClientNetworkSelectionConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~ClientNetworkSelectionConfiguration() = default;
 
     bool AutomaticSelection = true;
     bool ScanOnStartup = true;
@@ -51,15 +53,13 @@ struct ClientNetworkSelectionConfiguration final
 struct ClientConfiguration final : Serializable::Serializable<ClientConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(ClientConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(2)
+    ~ClientConfiguration() = default;
 
     bool Enabled = false;
-
-    // 0.1.x single-network fields remain source- and persistence-compatible.
     std::string SSID;
     std::string Password;
     AddressMode Addressing = AddressMode::DHCP;
     NetworkAddress StaticNetwork{};
-
     std::vector<ClientNetworkProfile> Networks;
     ClientNetworkSelectionConfiguration Selection{};
 
@@ -81,6 +81,7 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
 struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(DHCPServerConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~DHCPServerConfiguration() = default;
 
     bool Enabled = true;
     IPv4Address LeaseStart{192,168,4,2};
@@ -113,6 +114,7 @@ struct AccessPointConfiguration final : Serializable::Serializable<AccessPointCo
         Network.Gateway = IPv4Address(192,168,4,1);
         Network.SubnetMask = IPv4Address(255,255,255,0);
     }
+    ~AccessPointConfiguration() = default;
 
     ESPRESSIO_SERIALIZABLE_PROPERTIES(
         ESPRESSIO_PROPERTY("enabled", Enabled),
@@ -129,6 +131,7 @@ struct AccessPointConfiguration final : Serializable::Serializable<AccessPointCo
 struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
     ESPRESSIO_SERIALIZABLE_TYPE(ReconnectPolicy)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~ReconnectPolicy() = default;
 
     bool Enabled = true;
     uint32_t InitialDelayMilliseconds = 1000;
@@ -150,6 +153,7 @@ struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
 struct APUntilClientConfiguration final : Serializable::Serializable<APUntilClientConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(APUntilClientConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    ~APUntilClientConfiguration() = default;
 
     uint32_t FallbackTimeoutMilliseconds = 30000;
     uint32_t RetryScanIntervalMilliseconds = 30000;
@@ -163,6 +167,7 @@ struct APUntilClientConfiguration final : Serializable::Serializable<APUntilClie
 struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(3)
+    ~WiFiConfiguration() = default;
 
     WiFiMode Mode = WiFiMode::AccessPoint;
     std::string Hostname = "espressio";
