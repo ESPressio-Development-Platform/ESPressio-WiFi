@@ -10,6 +10,7 @@
 
 #include <ESPressio_ThreadSafeObservable.hpp>
 #include "ESPressio_IWiFiObserver.hpp"
+#include "ESPressio_IWiFiRadioObserver.hpp"
 #include "ESPressio_IWiFiConfigurationStore.hpp"
 
 namespace ESPressio::WiFi {
@@ -41,6 +42,7 @@ public:
     virtual WiFiStatus StopAccessPoint() = 0;
     virtual WiFiStatus StartScan() = 0;
     virtual WiFiStatus Poll(WiFiRuntimeState&, std::vector<ScanResult>*, std::vector<WiFiPlatformEvent>*) = 0;
+    virtual WiFiRadioState GetRadioState() const { return WiFiRadioState{}; }
 };
 
 class WiFiManager {
@@ -67,6 +69,32 @@ private:
         void Selection(const ClientNetworkSelectionRuntimeState& before, const ClientNetworkSelectionRuntimeState& after) { Notify([&](IWiFiObserver* o){ o->OnClientNetworkSelectionChanged(before, after); }); }
         void Selected(const ClientNetworkCandidate& selected) { Notify([&](IWiFiObserver* o){ o->OnClientNetworkSelected(selected); }); }
         void NoKnownNetwork() { Notify([](IWiFiObserver* o){ o->OnClientNoKnownNetworkAvailable(); }); }
+    };
+
+    class RadioObservable final : public Observable::ThreadSafeObservable {
+        template<typename F> void Notify(F&& callback) {
+            ExecuteNotification([&](NotificationContext& n) {
+                n.WithObservers<IWiFiRadioObserver>([&](IWiFiRadioObserver* o) {
+                    try { callback(o); } catch (...) {}
+                });
+            });
+        }
+    public:
+        void TransitionBeginning(const WiFiRadioState& before, WiFiRadioTransitionReason reason) {
+            Notify([&](IWiFiRadioObserver* o){ o->OnWiFiRadioTransitionBeginning(before, reason); });
+        }
+        void TransitionCompleted(const WiFiRadioState& before, const WiFiRadioState& after, WiFiRadioTransitionReason reason) {
+            Notify([&](IWiFiRadioObserver* o){ o->OnWiFiRadioTransitionCompleted(before, after, reason); });
+        }
+        void StateChanged(const WiFiRadioState& before, const WiFiRadioState& after) {
+            Notify([&](IWiFiRadioObserver* o){ o->OnWiFiRadioStateChanged(before, after); });
+        }
+        void ScanBeginning(const WiFiRadioState& before) {
+            Notify([&](IWiFiRadioObserver* o){ o->OnWiFiRadioScanBeginning(before); });
+        }
+        void ScanCompleted(const WiFiRadioState& after) {
+            Notify([&](IWiFiRadioObserver* o){ o->OnWiFiRadioScanCompleted(after); });
+        }
     };
 
 public:
@@ -103,6 +131,7 @@ public:
         state.APUntilClient = _apUntilClientState;
         return state;
     }
+    WiFiRadioState RadioState() const { return ReadRadioState(); }
     std::vector<ScanResult> LastScanResults() const { std::lock_guard<std::mutex> lock(_mutex); return _lastScanResults; }
     std::vector<ClientNetworkCandidate> EligibleClientNetworks() const { std::lock_guard<std::mutex> lock(_mutex); return _eligibleCandidates; }
     void SetWorkSignal(WorkSignal signal) { std::lock_guard<std::mutex> lock(_mutex); _workSignal = std::move(signal); }
@@ -137,9 +166,14 @@ public:
 
     Observable::ObserverHandlePtr RegisterObserver(IWiFiObserver* observer) { return _observable->RegisterObserver(observer); }
     void UnregisterObserver(IWiFiObserver* observer) { _observable->UnregisterObserver(observer); }
+    Observable::ObserverHandlePtr RegisterRadioObserver(IWiFiRadioObserver* observer) { return _radioObservable->RegisterObserver(observer); }
+    void UnregisterRadioObserver(IWiFiRadioObserver* observer) { _radioObservable->UnregisterObserver(observer); }
 
     WiFiStatus Configure(WiFiConfiguration configuration) {
-        const auto status = WithPlatform([&](){ return _platform.Apply(configuration); });
+        const auto status = ExecuteRadioTransition(
+            WiFiRadioTransitionReason::Configuration,
+            [&](){ return _platform.Apply(configuration); }
+        );
         if (status != WiFiStatus::Success) return status;
 
         bool scanOnStartup = false;
@@ -176,19 +210,35 @@ public:
         configuration.Mode = WiFiMode::Off;
         return Configure(std::move(configuration));
     }
-    WiFiStatus ConnectClient() { const auto r = WithPlatform([&](){ return _platform.ConnectClient(); }); SignalWork(); return r; }
-    WiFiStatus DisconnectClient() { const auto r = WithPlatform([&](){ return _platform.DisconnectClient(); }); SignalWork(); return r; }
-    WiFiStatus StartAccessPoint() { const auto r = WithPlatform([&](){ return _platform.StartAccessPoint(); }); SignalWork(); return r; }
-    WiFiStatus StopAccessPoint() { const auto r = WithPlatform([&](){ return _platform.StopAccessPoint(); }); SignalWork(); return r; }
+    WiFiStatus ConnectClient() {
+        const auto r = ExecuteRadioTransition(WiFiRadioTransitionReason::ClientConnect, [&](){ return _platform.ConnectClient(); });
+        SignalWork(); return r;
+    }
+    WiFiStatus DisconnectClient() {
+        const auto r = ExecuteRadioTransition(WiFiRadioTransitionReason::ClientDisconnect, [&](){ return _platform.DisconnectClient(); });
+        SignalWork(); return r;
+    }
+    WiFiStatus StartAccessPoint() {
+        const auto r = ExecuteRadioTransition(WiFiRadioTransitionReason::AccessPointStart, [&](){ return _platform.StartAccessPoint(); });
+        SignalWork(); return r;
+    }
+    WiFiStatus StopAccessPoint() {
+        const auto r = ExecuteRadioTransition(WiFiRadioTransitionReason::AccessPointStop, [&](){ return _platform.StopAccessPoint(); });
+        SignalWork(); return r;
+    }
 
     WiFiStatus Scan() {
-        const auto r = WithPlatform([&](){ return _platform.StartScan(); });
+        const auto before = ReadRadioState();
+        _radioObservable->ScanBeginning(before);
+        const auto r = ExecuteRadioTransition(WiFiRadioTransitionReason::Scan, [&](){ return _platform.StartScan(); });
         bool selectionScan = false;
         if (r == WiFiStatus::Success) {
             std::lock_guard<std::mutex> lock(_mutex);
             selectionScan = UsesClient(_configuration.Mode) && _configuration.Client.Enabled &&
                 _configuration.Client.Selection.AutomaticSelection && !_configuration.Client.Networks.empty() &&
                 _state.Client.State != ClientState::Connected;
+        } else {
+            _radioObservable->ScanCompleted(ReadRadioState());
         }
         if (selectionScan) SetSelectionState(ClientNetworkSelectionState::Scanning);
         SignalWork();
@@ -268,7 +318,14 @@ public:
         { std::lock_guard<std::mutex> lock(_mutex); next = _state; }
         std::vector<ScanResult> scan;
         std::vector<WiFiPlatformEvent> events;
-        const auto status = WithPlatform([&](){ return _platform.Poll(next, &scan, &events); });
+        WiFiRadioState radioAfter;
+        WiFiStatus status = WiFiStatus::PlatformError;
+        {
+            std::lock_guard<std::mutex> lock(_platformMutex);
+            status = _platform.Poll(next, &scan, &events);
+            radioAfter = _platform.GetRadioState();
+        }
+        PublishRadioState(radioAfter);
         if (status != WiFiStatus::Success) return status;
 
         WiFiRuntimeState before;
@@ -289,6 +346,7 @@ public:
             auto cb = CopyCallback(_scanCallback);
             if (cb) cb(scan);
             _observable->ScanComplete(scan);
+            _radioObservable->ScanCompleted(radioAfter);
             HandleCompletedScan(scan);
         }
         for (const auto& event : events) NotifyPlatformEvent(event);
@@ -305,6 +363,42 @@ private:
     template<typename F> WiFiStatus WithPlatform(F&& op) { std::lock_guard<std::mutex> lock(_platformMutex); return op(); }
     template<typename T> T CopyCallback(const T& cb) const { std::lock_guard<std::mutex> lock(_callbackMutex); return cb; }
     void SignalWork() { WorkSignal signal; { std::lock_guard<std::mutex> lock(_mutex); signal = _workSignal; } if (signal) signal(); }
+
+    WiFiRadioState ReadRadioState() const {
+        std::lock_guard<std::mutex> lock(_platformMutex);
+        return _platform.GetRadioState();
+    }
+
+    void PublishRadioState(const WiFiRadioState& after) {
+        WiFiRadioState before;
+        bool changed = false;
+        {
+            std::lock_guard<std::mutex> lock(_radioStateMutex);
+            before = _lastRadioState;
+            changed = !_haveRadioState || before != after;
+            _lastRadioState = after;
+            _haveRadioState = true;
+        }
+        if (changed) _radioObservable->StateChanged(before, after);
+    }
+
+    template<typename F>
+    WiFiStatus ExecuteRadioTransition(WiFiRadioTransitionReason reason, F&& op) {
+        const WiFiRadioState before = ReadRadioState();
+        _radioObservable->TransitionBeginning(before, reason);
+
+        WiFiStatus status = WiFiStatus::PlatformError;
+        WiFiRadioState after;
+        {
+            std::lock_guard<std::mutex> lock(_platformMutex);
+            status = op();
+            after = _platform.GetRadioState();
+        }
+
+        _radioObservable->TransitionCompleted(before, after, reason);
+        PublishRadioState(after);
+        return status;
+    }
 
     void SetSelectionState(ClientNetworkSelectionState state) {
         ClientNetworkSelectionRuntimeState before, after;
@@ -399,7 +493,7 @@ private:
         auto cb = CopyCallback(_selectedCallback); if (cb) cb(candidate);
         _observable->Selected(candidate);
         SetSelectionState(ClientNetworkSelectionState::Connecting);
-        const auto result = WithPlatform([&](){ return _platform.ConnectClient(profile); });
+        const auto result = ExecuteRadioTransition(WiFiRadioTransitionReason::ClientConnect, [&](){ return _platform.ConnectClient(profile); });
         SignalWork();
         return result;
     }
@@ -409,7 +503,7 @@ private:
         WiFiConfiguration config;
         { std::lock_guard<std::mutex> lock(_mutex); state = _apUntilClientState; config = _configuration; }
         if (state.FallbackAccessPointActive) return WiFiStatus::Success;
-        const auto result = WithPlatform([&](){ return _platform.StartAccessPoint(); });
+        const auto result = ExecuteRadioTransition(WiFiRadioTransitionReason::AccessPointStart, [&](){ return _platform.StartAccessPoint(); });
         if (result == WiFiStatus::Success) {
             const auto nextRetry = config.Client.Networks.empty() ? 0 : NowMilliseconds() + config.APUntilClient.RetryScanIntervalMilliseconds;
             SetAPUntilClientState(APUntilClientState::FallbackAccessPoint, true, 0, nextRetry);
@@ -435,7 +529,8 @@ private:
         if (config.Mode != WiFiMode::APUntilClient) return;
         const auto now = NowMilliseconds();
         if (clientState == ClientState::Connected) {
-            if (lifecycle.FallbackAccessPointActive) (void)WithPlatform([&](){ return _platform.StopAccessPoint(); });
+            if (lifecycle.FallbackAccessPointActive)
+                (void)ExecuteRadioTransition(WiFiRadioTransitionReason::AccessPointStop, [&](){ return _platform.StopAccessPoint(); });
             if (lifecycle.State != APUntilClientState::ClientConnected || lifecycle.FallbackAccessPointActive)
                 SetAPUntilClientState(APUntilClientState::ClientConnected, false, 0, 0);
             return;
@@ -492,7 +587,8 @@ private:
     Clock _clock;
     mutable std::mutex _mutex;
     mutable std::mutex _callbackMutex;
-    std::mutex _platformMutex;
+    mutable std::mutex _platformMutex;
+    mutable std::mutex _radioStateMutex;
     IWiFiConfigurationStore* _configurationStore = nullptr;
     WiFiConfiguration _configuration{};
     WiFiRuntimeState _state{};
@@ -503,6 +599,9 @@ private:
     std::size_t _nextCandidateIndex = 0;
     WorkSignal _workSignal;
     std::shared_ptr<ManagerObservable> _observable = std::make_shared<ManagerObservable>();
+    std::shared_ptr<RadioObservable> _radioObservable = std::make_shared<RadioObservable>();
+    WiFiRadioState _lastRadioState{};
+    bool _haveRadioState = false;
     ModeCallback _modeCallback;
     ClientCallback _clientCallback;
     AccessPointCallback _apCallback;
