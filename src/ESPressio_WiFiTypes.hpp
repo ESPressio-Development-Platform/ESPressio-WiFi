@@ -11,7 +11,11 @@ namespace ESPressio::WiFi {
 
 // APUntilClient is a conditional fallback mode: STA is preferred, while the AP
 // is exposed only until Client connectivity succeeds.
-enum class WiFiMode : uint8_t { Disabled, Client, AccessPoint, AccessPointClient, APUntilClient };
+//
+// Off is the canonical explicit radio-off mode. Disabled is retained as the
+// original 0.1/0.2 compatibility value and has the same platform effect, but
+// new applications and Commands should use Off.
+enum class WiFiMode : uint8_t { Disabled, Client, AccessPoint, AccessPointClient, APUntilClient, Off };
 enum class ClientState : uint8_t { Disabled, Idle, Connecting, Connected, Reconnecting, Disconnecting, Disconnected, Failed };
 enum class AccessPointState : uint8_t { Disabled, Starting, Active, Failed };
 enum class ScanState : uint8_t { Idle, Scanning, Complete, Failed };
@@ -125,7 +129,7 @@ struct APUntilClientRuntimeState {
 };
 
 struct WiFiRuntimeState {
-    WiFiMode Mode=WiFiMode::Disabled;
+    WiFiMode Mode=WiFiMode::Off;
     ClientRuntimeState Client{};
     AccessPointRuntimeState AccessPoint{};
     APUntilClientRuntimeState APUntilClient{};
@@ -141,7 +145,8 @@ ESPRESSIO_ENUM_MAPPING(
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::Client, "client"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::AccessPoint, "access-point"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::AccessPointClient, "access-point-client"),
-    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::APUntilClient, "ap-until-client")
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::APUntilClient, "ap-until-client"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::WiFiMode::Off, "off")
 )
 
 ESPRESSIO_ENUM_MAPPING(
