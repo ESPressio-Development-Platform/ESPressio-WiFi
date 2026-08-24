@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.1] - 2026-08-24
+
+### Changed
+
+- Raised required ESPressio Serializable to `>=0.11.3 <1.0.0`.
+- Raised required ESPressio Threads to `>=3.1.7 <4.0.0` while preserving Observable `>=3.0.2 <4.0.0`.
+- Updated ESP32 integration validation to released Serializable 0.11.3, Units 0.2.7, Timing 2.2.8, Threads 3.1.7, Persistence 0.3.2, Security 0.4.2, Event 6.0.3 and Command 1.0.3.
+- Removed the temporary Serializable bugfix-branch pin from CI; all ESPressio integration dependencies now use released tags.
+- Updated PlatformIO, Arduino and component version metadata for WiFi 0.2.1.
+
+### Compatibility
+
+- No WiFi public API, configuration schema, runtime state-machine, callback, Observer, Event Bridge, Command or Persistence behaviour changes are introduced by this maintenance release.
+- Existing 0.2.0 applications remain source-compatible.
+
+### Tracking
+
+- Closes #17.
+
 ## [0.2.0] - 2026-08-23
 
 ### Added

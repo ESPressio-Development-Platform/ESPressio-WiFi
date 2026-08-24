@@ -45,14 +45,14 @@ jobs:
           lib_deps =
               ../ESPressio-WiFi
               https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#3.0.2
-              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#bugfix/23-serializable-value-composition
-              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#0.2.6
-              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#2.2.7
-              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#3.1.6
-              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#0.3.1
-              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#0.4.1
-              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#6.0.2
-              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#1.0.2
+              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#0.11.3
+              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#0.2.7
+              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#2.2.8
+              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#3.1.7
+              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#0.3.2
+              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#0.4.2
+              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#6.0.3
+              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#1.0.3
           EOF
           cat > project/consumer/src/main.cpp <<'EOF'
           #include <Arduino.h>

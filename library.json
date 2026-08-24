@@ -1,6 +1,6 @@
 {
     "name": "ESPressio-WiFi",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "Autonomous, platform-neutral WiFi management with remembered-network selection and APUntilClient fallback for the ESPressio Development Platform",
     "keywords": "espressio,wifi,network,access-point,station,scan,configuration,threads,persistence,iot,provisioning",
     "homepage": "https://espressio.org",
@@ -12,7 +12,7 @@
     "headers": ["ESPressio_WiFi.hpp", "ESPressio_WiFiWorker.hpp"],
     "dependencies": {
         "espressio-development-platform/ESPressio-Observable": ">=3.0.2 <4.0.0",
-        "espressio-development-platform/ESPressio-Serializable": ">=0.11.2 <1.0.0",
-        "espressio-development-platform/ESPressio-Threads": ">=3.1.6 <4.0.0"
+        "espressio-development-platform/ESPressio-Serializable": ">=0.11.3 <1.0.0",
+        "espressio-development-platform/ESPressio-Threads": ">=3.1.7 <4.0.0"
     }
 }

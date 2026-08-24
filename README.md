@@ -2,15 +2,15 @@
 
 Autonomous, platform-neutral WiFi lifecycle and configuration for ESP32 applications.
 
-## Version — 0.2.0
+## Version — 0.2.1
 
-0.2.0 adds three core capabilities:
+0.2.0 added three core capabilities retained unchanged by this 0.2.1 dependency-maintenance release:
 
 - **remembered Client networks with deterministic priority-based automatic selection and failover**;
 - **autonomous WiFi runtime servicing on ESPressio Threads `PrecisionThread`**, removing the need to call `wifi.Poll()` from the application loop;
 - **`APUntilClient` IoT fallback mode**, which exposes an AP only while Client connectivity is unavailable.
 
-WiFi 0.2.0 is validated against the corrected Serializable 0.11.2 cascade: Observable 3.0.2, Serializable 0.11.2, Units 0.2.6, Timing 2.2.7, Threads 3.1.6, Event 6.0.2, Command 1.0.2, Security 0.4.1 and Persistence 0.3.1.
+WiFi 0.2.1 is validated against the released Serializable 0.11.3 cascade: Observable 3.0.2, Serializable 0.11.3, Units 0.2.7, Timing 2.2.8, Threads 3.1.7, Event 6.0.3, Command 1.0.3, Security 0.4.2 and Persistence 0.3.2.
 
 ## What ESPressio WiFi owns
 
@@ -32,14 +32,14 @@ HTTP, Captive Portal, WebSocket, browser UI and other Web concerns deliberately 
 
 ## Installation
 
-Core WiFi 0.2.0:
+Core WiFi 0.2.1:
 
 ```ini
 lib_deps =
-    espressio-development-platform/ESPressio-WiFi@^0.2.0
+    espressio-development-platform/ESPressio-WiFi@^0.2.1
     espressio-development-platform/ESPressio-Observable@^3.0.2
-    espressio-development-platform/ESPressio-Serializable@^0.11.2
-    espressio-development-platform/ESPressio-Threads@^3.1.6
+    espressio-development-platform/ESPressio-Serializable@^0.11.3
+    espressio-development-platform/ESPressio-Threads@^3.1.7
 ```
 
 Add Persistence, Security, Event and Command only when selecting those integrations.
@@ -183,9 +183,9 @@ void setup() {
     home.Priority = 300;
 
     ClientNetworkProfile studio;
-    studio.SSID = "Studio";
-    studio.Password = "studio-password";
-    studio.Priority = 200;
+studio.SSID = "Studio";
+studio.Password = "studio-password";
+studio.Priority = 200;
 
     config.Client.Networks = { home, studio };
 
@@ -402,7 +402,7 @@ WiFiConfigurationStore::Save(storage, "/wifi.espb", config);
 WiFiConfigurationStore::Load(storage, "/wifi.espb", config);
 ```
 
-WiFi 0.2.0 validates this optional integration against Persistence 0.3.1.
+WiFi 0.2.1 validates this optional integration against Persistence 0.3.2.
 
 ## Protecting remembered credentials
 
@@ -423,11 +423,11 @@ ProtectedWiFiConfigurationStore::Save(
 );
 ```
 
-Protected persistence is validated against Serializable 0.11.2, Persistence 0.3.1 and Security 0.4.1. WiFi never chooses the cipher or owns key material.
+Protected persistence is validated against Serializable 0.11.3, Persistence 0.3.2 and Security 0.4.2. WiFi never chooses the cipher or owns key material.
 
 ## Thread safety
 
-WiFi 0.2.0 treats `WiFiManager` as a concurrently accessed service. Configuration, runtime state, scan results, remembered profiles and selection state are synchronized internally.
+WiFi 0.2.1 treats `WiFiManager` as a concurrently accessed service. Configuration, runtime state, scan results, remembered profiles and selection state are synchronized internally.
 
 Callbacks and Observers are invoked **after internal state locks are released**, so notifications may safely call back into WiFi without being invoked beneath the manager state mutex. `Configuration()`, `State()`, `LastScanResults()` and `EligibleClientNetworks()` return snapshots rather than exposing mutable internal references.
 
@@ -438,18 +438,18 @@ Callbacks and Observers are invoked **after internal state locks are released**,
 ## Dependencies
 
 ```text
-WiFi 0.2.0
+WiFi 0.2.1
     -> Observable >= 3.0.2 < 4.0.0
-    -> Serializable >= 0.11.2 < 1.0.0
-    -> Threads >= 3.1.6 < 4.0.0
+    -> Serializable >= 0.11.3 < 1.0.0
+    -> Threads >= 3.1.7 < 4.0.0
 
 optional
-    - - -> Persistence >= 0.3.1 < 1.0.0
-    - - -> Security >= 0.4.1 < 1.0.0
-    - - -> Event >= 6.0.2 < 7.0.0
-    - - -> Command >= 1.0.2 < 2.0.0
+    - - -> Persistence >= 0.3.2 < 1.0.0
+    - - -> Security >= 0.4.2 < 1.0.0
+    - - -> Event >= 6.0.3 < 7.0.0
+    - - -> Command >= 1.0.3 < 2.0.0
 ```
 
-Threads is required because autonomous WiFi servicing is core 0.2.0 behaviour. Event, Command, Persistence and Security remain opt-in. Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
+Threads is required because autonomous WiFi servicing is core 0.2.x behaviour. Event, Command, Persistence and Security remain opt-in. Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
 
 See `ESPRESSIO_DEPENDENCY_CHART.md` and `CHANGELOG.md` for the coordinated platform position and release history.
