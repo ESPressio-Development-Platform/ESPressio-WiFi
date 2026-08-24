@@ -162,6 +162,49 @@ public:
         return WiFiStatus::Success;
     }
 
+    WiFiRadioState GetRadioState() const override {
+        WiFiRadioState state;
+
+        wifi_mode_t mode = WIFI_MODE_NULL;
+        if (esp_wifi_get_mode(&mode) != ESP_OK) return state;
+        switch (mode) {
+            case WIFI_MODE_STA:
+                state.Mode = WiFiRadioMode::Station;
+                state.StationInterfaceActive = true;
+                break;
+            case WIFI_MODE_AP:
+                state.Mode = WiFiRadioMode::AccessPoint;
+                state.AccessPointInterfaceActive = true;
+                break;
+            case WIFI_MODE_APSTA:
+                state.Mode = WiFiRadioMode::AccessPointStation;
+                state.StationInterfaceActive = true;
+                state.AccessPointInterfaceActive = true;
+                break;
+            case WIFI_MODE_NULL:
+            default:
+                state.Mode = WiFiRadioMode::Off;
+                break;
+        }
+
+        state.StationConnected = state.StationInterfaceActive && ::WiFi.status() == WL_CONNECTED;
+        state.Scanning = _scanRunning;
+
+        if (mode != WIFI_MODE_NULL) {
+            uint8_t primary = 0;
+            wifi_second_chan_t secondary = WIFI_SECOND_CHAN_NONE;
+            if (esp_wifi_get_channel(&primary, &secondary) == ESP_OK) state.Channel = primary;
+        }
+
+        uint8_t mac[6] = {};
+        if (state.StationInterfaceActive && esp_wifi_get_mac(WIFI_IF_STA, mac) == ESP_OK)
+            std::copy(mac, mac + 6, state.StationMAC.Octets.begin());
+        if (state.AccessPointInterfaceActive && esp_wifi_get_mac(WIFI_IF_AP, mac) == ESP_OK)
+            std::copy(mac, mac + 6, state.AccessPointMAC.Octets.begin());
+
+        return state;
+    }
+
 private:
     static bool PersistentAP(WiFiMode mode) { return mode == WiFiMode::AccessPoint || mode == WiFiMode::AccessPointClient; }
     static bool CanHostAP(WiFiMode mode) { return PersistentAP(mode) || mode == WiFiMode::APUntilClient; }
