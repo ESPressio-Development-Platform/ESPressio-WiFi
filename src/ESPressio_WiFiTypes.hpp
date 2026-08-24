@@ -24,6 +24,23 @@ enum class AddressMode : uint8_t { DHCP, Static };
 enum class ClientNetworkSelectionState : uint8_t { Idle, Scanning, Selecting, Connecting, Connected, NoKnownNetworkAvailable, Exhausted };
 enum class APUntilClientState : uint8_t { Inactive, SeekingClient, FallbackAccessPoint, ClientConnected };
 
+enum class WiFiRadioMode : uint8_t {
+    Off = 0,
+    Station,
+    AccessPoint,
+    AccessPointStation
+};
+
+enum class WiFiRadioTransitionReason : uint8_t {
+    Configuration = 0,
+    ClientConnect,
+    ClientDisconnect,
+    AccessPointStart,
+    AccessPointStop,
+    Scan,
+    DriverStateChange
+};
+
 struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     ESPRESSIO_SERIALIZABLE_TYPE(IPv4Address)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -45,6 +62,32 @@ struct MacAddress final : Serializable::Serializable<MacAddress> {
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("octets", Octets))
     bool operator==(const MacAddress& other) const noexcept { return Octets==other.Octets; }
     bool operator!=(const MacAddress& other) const noexcept { return !(*this==other); }
+};
+
+// Authoritative physical state of the shared 2.4 GHz WiFi radio. This is
+// intentionally separate from WiFiRuntimeState: consumers such as ESP-NOW
+// need native interface/channel/MAC facts, not only application semantics.
+struct WiFiRadioState {
+    WiFiRadioMode Mode = WiFiRadioMode::Off;
+    bool StationInterfaceActive = false;
+    bool StationConnected = false;
+    bool AccessPointInterfaceActive = false;
+    bool Scanning = false;
+    uint8_t Channel = 0;
+    MacAddress StationMAC{};
+    MacAddress AccessPointMAC{};
+
+    bool operator==(const WiFiRadioState& other) const noexcept {
+        return Mode == other.Mode &&
+            StationInterfaceActive == other.StationInterfaceActive &&
+            StationConnected == other.StationConnected &&
+            AccessPointInterfaceActive == other.AccessPointInterfaceActive &&
+            Scanning == other.Scanning &&
+            Channel == other.Channel &&
+            StationMAC == other.StationMAC &&
+            AccessPointMAC == other.AccessPointMAC;
+    }
+    bool operator!=(const WiFiRadioState& other) const noexcept { return !(*this == other); }
 };
 
 struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
