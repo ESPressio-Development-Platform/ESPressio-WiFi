@@ -24,6 +24,7 @@ public:
         _reconnectAttempts = 0;
         _nextReconnectMilliseconds = 0;
         _hasActiveProfile = false;
+        _scanRunning = false;
 
         wifi_mode_t mode = WIFI_MODE_NULL;
         switch (configuration.Mode) {
@@ -32,8 +33,21 @@ public:
             case WiFiMode::AccessPoint: mode = WIFI_MODE_AP; break;
             case WiFiMode::AccessPointClient: mode = WIFI_MODE_APSTA; break;
             case WiFiMode::APUntilClient: mode = WIFI_MODE_STA; break;
+            case WiFiMode::Off: mode = WIFI_MODE_NULL; break;
         }
         if (!::WiFi.mode(mode)) return WiFiStatus::PlatformError;
+
+        // Off/legacy Disabled are terminal radio-off configurations. Do not
+        // touch hostname, power, DHCP, scan, reconnect, STA or AP facilities
+        // after the driver has entered WIFI_MODE_NULL.
+        if (configuration.Mode == WiFiMode::Off || configuration.Mode == WiFiMode::Disabled) {
+            _state = WiFiRuntimeState{};
+            _state.Mode = configuration.Mode;
+            ++_state.Revision;
+            _knownStations.clear();
+            return WiFiStatus::Success;
+        }
+
         if (!configuration.Hostname.empty()) (void)::WiFi.setHostname(configuration.Hostname.c_str());
 
         const bool automaticProfiles = UsesClient(configuration.Mode) && configuration.Client.Enabled &&
@@ -51,11 +65,13 @@ public:
 
     WiFiStatus Disable() override {
         _manualDisconnect = true;
+        _scanRunning = false;
         if (!::WiFi.mode(WIFI_MODE_NULL)) return WiFiStatus::PlatformError;
-        _configuration.Mode = WiFiMode::Disabled;
-        _state.Client.State = ClientState::Disabled;
-        _state.AccessPoint.State = AccessPointState::Disabled;
+        _configuration.Mode = WiFiMode::Off;
+        _state = WiFiRuntimeState{};
+        _state.Mode = WiFiMode::Off;
         ++_state.Revision;
+        _knownStations.clear();
         return WiFiStatus::Success;
     }
 
@@ -119,6 +135,7 @@ public:
     }
 
     WiFiStatus StartScan() override {
+        if (_configuration.Mode == WiFiMode::Off || _configuration.Mode == WiFiMode::Disabled) return WiFiStatus::NotSupported;
         if (_scanRunning) return WiFiStatus::Busy;
         const int16_t started = ::WiFi.scanNetworks(true, true);
         if (started == WIFI_SCAN_FAILED) {
