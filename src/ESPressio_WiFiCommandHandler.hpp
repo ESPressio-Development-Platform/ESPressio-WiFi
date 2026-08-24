@@ -21,13 +21,14 @@ public:
         root.Command("status").Description("Show composite AP/client/scan/fallback WiFi state")
             .OnExecute([this](const Command::CommandContext&) { return Status(); });
 
-        auto& mode = root.Command("mode").Description("Set WiFi operating mode");
+        auto& mode = root.Command("mode").Description("Set WiFi operating mode; 'off' powers the WiFi radio down completely");
         mode.Parameter("mode", Command::ParameterKind::Enumeration)
-            .OneOf({"disabled","client","ap","ap-client","ap-until-client"});
+            .OneOf({"off","disabled","client","ap","ap-client","ap-until-client"});
         mode.OnExecute([this](const Command::CommandContext& context) {
             auto config = _manager->Configuration();
             const auto text = context.Get<std::string>("mode");
-            if (text == "disabled") config.Mode = WiFiMode::Disabled;
+            if (text == "off") config.Mode = WiFiMode::Off;
+            else if (text == "disabled") config.Mode = WiFiMode::Disabled;
             else if (text == "client") config.Mode = WiFiMode::Client;
             else if (text == "ap") config.Mode = WiFiMode::AccessPoint;
             else if (text == "ap-client") config.Mode = WiFiMode::AccessPointClient;
@@ -148,7 +149,7 @@ private:
     static Command::CommandResult StoreResult(const WiFiConfigurationStoreResult& result){return result.Success()?Command::CommandResult::Ok("OK"):Command::CommandResult::Error(result.Message.empty()?"WiFi configuration persistence failed":result.Message);}
     static bool ParseIPv4(const std::string& text,IPv4Address& output){unsigned a=0,b=0,c=0,d=0;char tail=0;if(std::sscanf(text.c_str(),"%u.%u.%u.%u%c",&a,&b,&c,&d,&tail)!=4||a>255||b>255||c>255||d>255)return false;output=IPv4Address(static_cast<uint8_t>(a),static_cast<uint8_t>(b),static_cast<uint8_t>(c),static_cast<uint8_t>(d));return true;}
     static const char* StatusName(WiFiStatus v){switch(v){case WiFiStatus::Success:return"success";case WiFiStatus::InvalidConfiguration:return"invalid configuration";case WiFiStatus::NotSupported:return"not supported";case WiFiStatus::Busy:return"busy";default:return"platform error";}}
-    static const char* ModeName(WiFiMode v){switch(v){case WiFiMode::Disabled:return"disabled";case WiFiMode::Client:return"client";case WiFiMode::AccessPoint:return"ap";case WiFiMode::AccessPointClient:return"ap-client";case WiFiMode::APUntilClient:return"ap-until-client";default:return"unknown";}}
+    static const char* ModeName(WiFiMode v){switch(v){case WiFiMode::Off:return"off";case WiFiMode::Disabled:return"disabled";case WiFiMode::Client:return"client";case WiFiMode::AccessPoint:return"ap";case WiFiMode::AccessPointClient:return"ap-client";case WiFiMode::APUntilClient:return"ap-until-client";default:return"unknown";}}
     static const char* ClientStateName(ClientState v){switch(v){case ClientState::Disabled:return"disabled";case ClientState::Idle:return"idle";case ClientState::Connecting:return"connecting";case ClientState::Connected:return"connected";case ClientState::Reconnecting:return"reconnecting";case ClientState::Disconnecting:return"disconnecting";case ClientState::Disconnected:return"disconnected";default:return"failed";}}
     static const char* APStateName(AccessPointState v){switch(v){case AccessPointState::Disabled:return"disabled";case AccessPointState::Starting:return"starting";case AccessPointState::Active:return"active";default:return"failed";}}
     static const char* APUntilClientStateName(APUntilClientState v){switch(v){case APUntilClientState::Inactive:return"inactive";case APUntilClientState::SeekingClient:return"seeking-client";case APUntilClientState::FallbackAccessPoint:return"fallback-access-point";case APUntilClientState::ClientConnected:return"client-connected";default:return"unknown";}}
