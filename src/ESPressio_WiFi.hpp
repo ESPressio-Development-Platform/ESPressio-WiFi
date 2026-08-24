@@ -171,7 +171,11 @@ public:
     }
 
     WiFiStatus ApplyConfiguration() { return Configure(Configuration()); }
-    WiFiStatus Disable() { const auto r = WithPlatform([&](){ return _platform.Disable(); }); SignalWork(); return r; }
+    WiFiStatus Disable() {
+        auto configuration = Configuration();
+        configuration.Mode = WiFiMode::Off;
+        return Configure(std::move(configuration));
+    }
     WiFiStatus ConnectClient() { const auto r = WithPlatform([&](){ return _platform.ConnectClient(); }); SignalWork(); return r; }
     WiFiStatus DisconnectClient() { const auto r = WithPlatform([&](){ return _platform.DisconnectClient(); }); SignalWork(); return r; }
     WiFiStatus StartAccessPoint() { const auto r = WithPlatform([&](){ return _platform.StartAccessPoint(); }); SignalWork(); return r; }
