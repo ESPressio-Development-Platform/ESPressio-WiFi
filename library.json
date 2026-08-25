@@ -18,8 +18,7 @@
         },
         {
             "name": "ESPressio-Serializable",
-            "version": ">=0.11.3 <1.0.0",
-            "url": "https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git"
+            "url": "https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#optimisation/25-psram-buffers"
         },
         {
             "name": "ESPressio-Threads",
