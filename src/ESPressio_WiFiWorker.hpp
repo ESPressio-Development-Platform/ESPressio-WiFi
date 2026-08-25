@@ -29,6 +29,7 @@ public:
         WiFiManager& manager,
         WiFiWorkerConfiguration configuration = {}
     ) : _manager(manager), _configuration(configuration) {
+        SetStartOnInitialize(false);
         ApplyRuntimeConfiguration(configuration);
         _manager.SetWorkSignal([this]() { this->Bump(); });
     }
