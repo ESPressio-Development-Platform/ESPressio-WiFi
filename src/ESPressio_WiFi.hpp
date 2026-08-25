@@ -170,6 +170,7 @@ public:
     void UnregisterRadioObserver(IWiFiRadioObserver* observer) { _radioObservable->UnregisterObserver(observer); }
 
     WiFiStatus Configure(WiFiConfiguration configuration) {
+        std::lock_guard<std::recursive_mutex> transitionLock(_radioTransitionMutex);
         const auto status = ExecuteRadioTransition(
             WiFiRadioTransitionReason::Configuration,
             [&](){ return _platform.Apply(configuration); }
@@ -228,6 +229,7 @@ public:
     }
 
     WiFiStatus Scan() {
+        std::lock_guard<std::recursive_mutex> transitionLock(_radioTransitionMutex);
         const auto before = ReadRadioState();
         _radioObservable->ScanBeginning(before);
         const auto r = ExecuteRadioTransition(WiFiRadioTransitionReason::Scan, [&](){ return _platform.StartScan(); });
@@ -314,6 +316,7 @@ public:
     void OnClientNoKnownNetworkAvailable(SimpleCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _noKnownNetworkCallback = std::move(cb); }
 
     WiFiStatus ProcessOnce() {
+        std::lock_guard<std::recursive_mutex> transitionLock(_radioTransitionMutex);
         WiFiRuntimeState next;
         { std::lock_guard<std::mutex> lock(_mutex); next = _state; }
         std::vector<ScanResult> scan;
@@ -384,6 +387,7 @@ private:
 
     template<typename F>
     WiFiStatus ExecuteRadioTransition(WiFiRadioTransitionReason reason, F&& op) {
+        std::lock_guard<std::recursive_mutex> transitionLock(_radioTransitionMutex);
         const WiFiRadioState before = ReadRadioState();
         _radioObservable->TransitionBeginning(before, reason);
 
@@ -588,6 +592,7 @@ private:
     mutable std::mutex _mutex;
     mutable std::mutex _callbackMutex;
     mutable std::mutex _platformMutex;
+    mutable std::recursive_mutex _radioTransitionMutex;
     mutable std::mutex _radioStateMutex;
     IWiFiConfigurationStore* _configurationStore = nullptr;
     WiFiConfiguration _configuration{};
