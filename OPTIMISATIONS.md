@@ -10,7 +10,7 @@ Rollback anchor: `rollback/optimisations-pre-20260825` -> `69eda04fd49d12067d5fc
 WiFi already has active shared-radio lifecycle work on `feature/20-wifi-off-mode`. The optimisation round does not currently change WiFi runtime behavior; this repository is participating because it explicitly consumes ESPressio Threads and must exercise the active Threads optimisation branch during integration testing.
 
 ### Dependency pin
-`library.json` now resolves ESPressio Threads directly from `optimisation/69-resource-footprint` on the working branch.
+`library.json` resolves ESPressio Threads directly from `optimisation/69-resource-footprint` on the working branch.
 
 ### Existing resource-related design
 - WiFi remains authoritative for native radio mode/channel.
@@ -32,10 +32,18 @@ The Lab's ESP-NOW-only control remains highly reliable when it establishes a sta
 - IP configuration, DHCP, hostname and station bookkeeping remain intentionally outside the fingerprint because they are network-layer concerns, not RF equivalence.
 
 ### Coordination contract
-WiFi remains the authoritative radio owner whenever ESPressio WiFi is present. Disruptive radio changes continue to publish low-level transition callbacks before and after the platform operation. ESP-Now #44 now consumes those callbacks transactionally: new sends are blocked and native ESP-NOW is detached before the driver transition, then rebuilt/reconciled against the resulting WiFi state afterward.
+WiFi remains the authoritative radio owner whenever ESPressio WiFi is present. Disruptive radio changes continue to publish low-level transition callbacks before and after the platform operation. ESP-Now #44 consumes those callbacks transactionally: new sends are blocked and native ESP-NOW is detached before the driver transition, then rebuilt/reconciled against the resulting WiFi state afterward.
 
 ### Safety / rollback
 The new helper is additive and does not change normal WiFi runtime behavior by itself. Existing `TxPowerDbm` and `PowerSave` configuration semantics remain unchanged. The pre-optimisation rollback branch remains the repository-level recovery point.
 
 ### Commits
 - `a918417` — `feat(#22): add canonical ESP32 radio fingerprint and policy`
+
+## 2026-08-25 — Pin Serializable PSRAM-buffer optimisation (#22 / Serializable #25)
+
+WiFi explicitly consumes ESPressio Serializable for configuration/state serialization. During this hardware-optimisation round, `library.json` now resolves Serializable directly from `optimisation/25-psram-buffers` so WiFi integration tests cannot silently use the released allocator behavior while the Lab validates external-RAM-backed serialization.
+
+The dependency change does not itself enable the opt-in PSRAM policy; applications choose that with `ESPRESSIO_SERIALIZATION_PREFER_PSRAM`. Boards without PSRAM remain safe because the prefer-PSRAM allocator falls back to internal 8-bit memory.
+
+Commit: `128ef65610fcfe3e2d12996866d977b0c0517452`.
