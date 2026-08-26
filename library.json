@@ -13,16 +13,15 @@
     "dependencies": [
         {
             "name": "ESPressio-Observable",
-            "version": ">=3.0.2 <4.0.0",
-            "url": "https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git"
+            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#feature/16-rtti-free-observer-registry"
         },
         {
             "name": "ESPressio-Serializable",
-            "url": "https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#optimisation/25-psram-buffers"
+            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#optimisation/25-psram-buffers"
         },
         {
             "name": "ESPressio-Threads",
-            "url": "https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#integration/69-73-memory-efficiency"
+            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#optimisation/69-resource-footprint"
         }
     ]
 }
