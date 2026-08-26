@@ -22,7 +22,7 @@
         },
         {
             "name": "ESPressio-Threads",
-            "url": "https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#optimisation/69-resource-footprint"
+            "url": "https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#feature/73-memory-efficiency"
         }
     ]
 }
