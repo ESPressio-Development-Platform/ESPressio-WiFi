@@ -47,3 +47,30 @@ WiFi explicitly consumes ESPressio Serializable for configuration/state serializ
 The dependency change does not itself enable the opt-in PSRAM policy; applications choose that with `ESPRESSIO_SERIALIZATION_PREFER_PSRAM`. Boards without PSRAM remain safe because the prefer-PSRAM allocator falls back to internal 8-bit memory.
 
 Commit: `128ef65610fcfe3e2d12996866d977b0c0517452`.
+
+## 2026-08-26 — Compact retained ESP32 platform configuration (#23)
+
+### Hardware context
+Post-ESP-NOW stack/lifetime optimisation moved the current Lab failure away from worker stack canaries and into native WiFi SoftAP/internal-heap startup. The useful next step is therefore to maximize internal-memory headroom at the native SoftAP boundary without changing ESP-IDF radio behavior.
+
+### Finding
+`WiFiManager::Configure()` owns the complete `WiFiConfiguration`, but `ESP32WiFiPlatform::Apply()` previously copied and retained a second complete configuration before calling `WiFi.softAP()`. That duplicate included the manager-owned remembered-client `Networks` vector, its SSID/password strings, client-selection policy, APUntilClient policy and hostname even though the platform does not require those fields after `Apply()`.
+
+### Change
+`ESP32WiFiPlatform` now retains a private compact operational snapshot containing only the state needed by its native runtime paths:
+- operating mode;
+- legacy client enabled/SSID/password/addressing/static network;
+- access-point configuration and DHCP settings;
+- reconnect policy;
+- TX power and power-save policy.
+
+Automatic remembered-profile selection is still derived synchronously from the caller's complete configuration during `Apply()`. `ConnectClient(profile)`, AP start/stop, DHCP, reconnect and radio-policy behavior remain unchanged. The platform no longer retains the remembered-network collection, selection policy, APUntilClient policy or hostname.
+
+### Expected memory effect
+This removes one long-lived duplicate `std::vector<ClientNetworkProfile>` plus its profile/string allocations from the ESP32 platform before native SoftAP startup. It does not change or hide ESP-IDF's own internal-memory requirements; it simply returns ESPressio-owned headroom to the allocator at the point where native WiFi needs it.
+
+### Safety / validation
+The existing ESP32 integration consumer configures `APUntilClient` with a remembered preferred network, so CI continues to compile the automatic-profile path against the compact retained state. Hardware free/largest-internal-heap telemetry remains the authority for measuring the actual SoftAP headroom improvement.
+
+### Commits
+- `86af5eb` — `optimise(#23): retain compact ESP32 WiFi platform configuration`
