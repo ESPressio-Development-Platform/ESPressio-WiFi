@@ -19,7 +19,7 @@ class ESP32WiFiPlatform final : public IWiFiPlatform {
 public:
     WiFiStatus Apply(const WiFiConfiguration& configuration) override {
         if (!Validate(configuration)) return WiFiStatus::InvalidConfiguration;
-        _configuration = configuration;
+        _configuration = RetainConfiguration(configuration);
         _manualDisconnect = false;
         _reconnectAttempts = 0;
         _nextReconnectMilliseconds = 0;
@@ -206,6 +206,38 @@ public:
     }
 
 private:
+    struct PlatformClientConfiguration {
+        bool Enabled = false;
+        std::string SSID;
+        std::string Password;
+        AddressMode Addressing = AddressMode::DHCP;
+        NetworkAddress StaticNetwork{};
+    };
+
+    struct PlatformConfiguration {
+        WiFiMode Mode = WiFiMode::AccessPoint;
+        PlatformClientConfiguration Client{};
+        AccessPointConfiguration AccessPoint{};
+        ReconnectPolicy Reconnect{};
+        int8_t TxPowerDbm = 20;
+        bool PowerSave = false;
+    };
+
+    static PlatformConfiguration RetainConfiguration(const WiFiConfiguration& configuration) {
+        PlatformConfiguration retained;
+        retained.Mode = configuration.Mode;
+        retained.Client.Enabled = configuration.Client.Enabled;
+        retained.Client.SSID = configuration.Client.SSID;
+        retained.Client.Password = configuration.Client.Password;
+        retained.Client.Addressing = configuration.Client.Addressing;
+        retained.Client.StaticNetwork = configuration.Client.StaticNetwork;
+        retained.AccessPoint = configuration.AccessPoint;
+        retained.Reconnect = configuration.Reconnect;
+        retained.TxPowerDbm = configuration.TxPowerDbm;
+        retained.PowerSave = configuration.PowerSave;
+        return retained;
+    }
+
     static bool PersistentAP(WiFiMode mode) { return mode == WiFiMode::AccessPoint || mode == WiFiMode::AccessPointClient; }
     static bool CanHostAP(WiFiMode mode) { return PersistentAP(mode) || mode == WiFiMode::APUntilClient; }
     static bool UsesClient(WiFiMode mode) { return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient || mode == WiFiMode::APUntilClient; }
@@ -364,7 +396,7 @@ private:
 
     static bool StateChanged(const WiFiRuntimeState&a,const WiFiRuntimeState&b){return a.Mode!=b.Mode||a.Client.State!=b.Client.State||a.Client.SSID!=b.Client.SSID||a.Client.RSSI!=b.Client.RSSI||a.Client.Channel!=b.Client.Channel||a.Client.Network.Address!=b.Client.Network.Address||a.Client.ReconnectAttempt!=b.Client.ReconnectAttempt||a.AccessPoint.State!=b.AccessPoint.State||a.AccessPoint.SSID!=b.AccessPoint.SSID||a.AccessPoint.Channel!=b.AccessPoint.Channel||a.AccessPoint.ConnectedStations!=b.AccessPoint.ConnectedStations||a.AccessPoint.Network.Address!=b.AccessPoint.Network.Address||a.Scan!=b.Scan;}
 
-    WiFiConfiguration _configuration{}; WiFiRuntimeState _state{}; ClientNetworkProfile _activeProfile{}; bool _hasActiveProfile=false; bool _manualDisconnect=false; bool _scanRunning=false; uint32_t _clientAttemptStartedMilliseconds=0; uint32_t _nextReconnectMilliseconds=0; uint32_t _reconnectAttempts=0; std::vector<MacAddress> _knownStations;
+    PlatformConfiguration _configuration{}; WiFiRuntimeState _state{}; ClientNetworkProfile _activeProfile{}; bool _hasActiveProfile=false; bool _manualDisconnect=false; bool _scanRunning=false; uint32_t _clientAttemptStartedMilliseconds=0; uint32_t _nextReconnectMilliseconds=0; uint32_t _reconnectAttempts=0; std::vector<MacAddress> _knownStations;
 };
 
 } // namespace ESPressio::WiFi
