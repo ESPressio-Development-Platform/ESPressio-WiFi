@@ -41,21 +41,21 @@ jobs:
           extra_scripts = pre:network_include.py
           build_flags =
               -std=gnu++17
-              -frtti
+              -fno-rtti
               -DESPRESSIO_SERIALIZATION_PREFER_PSRAM
-          build_unflags = -std=gnu++11 -fno-rtti
+          build_unflags = -std=gnu++11 -frtti
           lib_ldf_mode = deep+
           lib_deps =
               ../ESPressio-WiFi
               https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#feature/16-rtti-free-observer-registry
               https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#optimisation/25-psram-buffers
-              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#0.2.7
-              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#2.2.8
-              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#integration/69-73-memory-efficiency
-              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#0.3.2
-              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#0.4.2
+              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#optimisation/69-resource-footprint
+              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#main
               https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#feature/57-rtti-free-memory-efficiency
-              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#feature/32-memory-efficiency
+              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#feature/30-async-command-routing
           EOF
           cat > project/consumer/src/main.cpp <<'EOF'
           #include <Arduino.h>
