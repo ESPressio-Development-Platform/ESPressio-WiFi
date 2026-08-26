@@ -10,7 +10,7 @@ Rollback anchor: `rollback/optimisations-pre-20260825` -> `69eda04fd49d12067d5fc
 WiFi already has active shared-radio lifecycle work on `feature/20-wifi-off-mode`. The optimisation round does not currently change WiFi runtime behavior; this repository is participating because it explicitly consumes ESPressio Threads and must exercise the active Threads optimisation branch during integration testing.
 
 ### Dependency pin
-`library.json` resolves ESPressio Threads directly from `optimisation/69-resource-footprint` on the working branch.
+`library.json` resolves ESPressio Threads directly from `feature/73-memory-efficiency` on the working branch.
 
 ### Existing resource-related design
 - WiFi remains authoritative for native radio mode/channel.
@@ -42,7 +42,7 @@ The new helper is additive and does not change normal WiFi runtime behavior by i
 
 ## 2026-08-25 — Pin Serializable PSRAM-buffer optimisation (#22 / Serializable #25)
 
-WiFi explicitly consumes ESPressio Serializable for configuration/state serialization. During this hardware-optimisation round, `library.json` now resolves Serializable directly from `optimisation/25-psram-buffers` so WiFi integration tests cannot silently use the released allocator behavior while the Lab validates external-RAM-backed serialization.
+WiFi explicitly consumes ESPressio Serializable for configuration/state serialization. During this hardware-optimisation round, `library.json` resolves Serializable directly from `optimisation/25-psram-buffers` so WiFi integration tests cannot silently use the released allocator behavior while the Lab validates external-RAM-backed serialization.
 
 The dependency change does not itself enable the opt-in PSRAM policy; applications choose that with `ESPRESSIO_SERIALIZATION_PREFER_PSRAM`. Boards without PSRAM remain safe because the prefer-PSRAM allocator falls back to internal 8-bit memory.
 
@@ -69,8 +69,20 @@ Automatic remembered-profile selection is still derived synchronously from the c
 ### Expected memory effect
 This removes one long-lived duplicate `std::vector<ClientNetworkProfile>` plus its profile/string allocations from the ESP32 platform before native SoftAP startup. It does not change or hide ESP-IDF's own internal-memory requirements; it simply returns ESPressio-owned headroom to the allocator at the point where native WiFi needs it.
 
+### Integration graph
+Working-branch CI now validates WiFi against the active memory-efficiency heads rather than released/stale dependencies:
+- Observable `feature/16-rtti-free-observer-registry`;
+- Serializable `optimisation/25-psram-buffers`, with `ESPRESSIO_SERIALIZATION_PREFER_PSRAM` enabled;
+- Threads `feature/73-memory-efficiency`;
+- Event `feature/57-rtti-free-memory-efficiency`;
+- Command `feature/32-memory-efficiency`.
+
+The ESP32 integration consumer also transfers its test configuration into `WiFiManager::Configure()` with `std::move`, exercising the API's intended ownership-transfer path rather than retaining an avoidable caller-side copy during setup.
+
 ### Safety / validation
 The existing ESP32 integration consumer configures `APUntilClient` with a remembered preferred network, so CI continues to compile the automatic-profile path against the compact retained state. Hardware free/largest-internal-heap telemetry remains the authority for measuring the actual SoftAP headroom improvement.
 
 ### Commits
 - `86af5eb` — `optimise(#23): retain compact ESP32 WiFi platform configuration`
+- `3da55c3` — `chore(#23): validate against active Threads optimisation branch`
+- `e25717f` — `test(#23): exercise active memory-efficiency branches`
