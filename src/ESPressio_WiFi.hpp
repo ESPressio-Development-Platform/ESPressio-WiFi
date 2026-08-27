@@ -198,9 +198,13 @@ public:
         return result;
     }
 
-    Observable::ObserverHandlePtr RegisterObserver(IWiFiObserver* observer) { return _observable->RegisterObserver(observer); }
+    Observable::ObserverHandlePtr RegisterObserver(IWiFiObserver* observer) {
+        return _observable->template RegisterObserverAs<IWiFiObserver>(observer);
+    }
     void UnregisterObserver(IWiFiObserver* observer) { _observable->UnregisterObserver(observer); }
-    Observable::ObserverHandlePtr RegisterRadioObserver(IWiFiRadioObserver* observer) { return _radioObservable->RegisterObserver(observer); }
+    Observable::ObserverHandlePtr RegisterRadioObserver(IWiFiRadioObserver* observer) {
+        return _radioObservable->template RegisterObserverAs<IWiFiRadioObserver>(observer);
+    }
     void UnregisterRadioObserver(IWiFiRadioObserver* observer) { _radioObservable->UnregisterObserver(observer); }
 
     WiFiStatus Configure(WiFiConfiguration configuration) {
