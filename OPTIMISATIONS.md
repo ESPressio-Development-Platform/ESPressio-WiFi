@@ -111,3 +111,28 @@ The current working manifest resolves Threads from `optimisation/69-resource-foo
 - `26df43b` — main manager storage/copy-reduction implementation
 - `c3e23d3` — working-branch System dependency metadata
 - `f522e7a` — lock-boundary correction for candidate empty-state inspection
+
+## 2026-08-27 — Phase 11 callback ownership and typed-observer audit (#25 / #26)
+
+### Copy audit
+WiFi callback dispatch previously copied each registered `std::function` under `_callbackMutex` solely so the mutex could be released before invoking user code. A capturing callable can own heap storage, making this a recurring deep-copy path on mode, client, AP, scan, station, IP and selection notifications.
+
+Registered callbacks are now stored as stable immutable `shared_ptr<const std::function<...>>` registrations allocated through ESPressio-System `ExternalPreferred` memory. Dispatch snapshots only the `shared_ptr` while holding `_callbackMutex`, then invokes the same callable after unlocking. Re-registration safely replaces the stored registration while in-flight notifications retain the previous registration until completion.
+
+`WorkSignal` uses the same stable-registration model under the manager mutex.
+
+### Deliberately retained snapshots
+- `Configuration()`, `State()`, scan-result accessors and candidate accessors return independent public snapshots by contract;
+- `SaveConfiguration()` retains an independent configuration snapshot because the storage call occurs after releasing the manager mutex;
+- candidate/profile snapshots used across platform calls remain independent because platform code executes outside the manager lock;
+- scalar transition snapshots remain value copies because they define before/after observations and lock boundaries.
+
+### RTTI-free correctness found during the audit (#26)
+`ManagerObservable` and `RadioObservable` notify typed interfaces, so their public wrappers now register observers explicitly through `RegisterObserverAs<IWiFiObserver>` and `RegisterObserverAs<IWiFiRadioObserver>`. No RTTI fallback or generic-discovery compatibility path was added.
+
+### Validation
+Host tests pass after both changes. The first ESP32 integration attempt failed before compilation because the pioarduino toolchain archive returned repeated HTTP 500 responses; that job was re-run without source changes.
+
+Commits:
+- `059f518` — retain stable WiFi callbacks instead of copying callables;
+- `9459b63` — register WiFi observers by typed interface.
