@@ -511,6 +511,7 @@ private:
         if (!shouldSelect) return;
 
         auto candidates = BuildCandidates(scan);
+        bool noCandidates = false;
         {
             std::lock_guard<std::mutex> lock(_mutex);
             _eligibleCandidates = std::move(candidates);
@@ -519,8 +520,9 @@ private:
             _selectionState.SelectedSSID.clear();
             _selectionState.SelectedPriority = 0;
             _selectionState.SelectedProfileIndex = 0;
+            noCandidates = _eligibleCandidates.empty();
         }
-        if (_eligibleCandidates.empty()) {
+        if (noCandidates) {
             SetSelectionState(ClientNetworkSelectionState::NoKnownNetworkAvailable);
             auto cb = CopyCallback(_noKnownNetworkCallback); if (cb) cb();
             _observable->NoKnownNetwork();
