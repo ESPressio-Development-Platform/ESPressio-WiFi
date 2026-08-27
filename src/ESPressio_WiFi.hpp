@@ -160,7 +160,11 @@ public:
         return std::vector<ClientNetworkCandidate>(_eligibleCandidates.begin(), _eligibleCandidates.end());
     }
 
-    void SetWorkSignal(WorkSignal signal) { std::lock_guard<std::mutex> lock(_mutex); _workSignal = std::move(signal); }
+    void SetWorkSignal(WorkSignal signal) {
+        auto registration = MakeCallbackRegistration(std::move(signal));
+        std::lock_guard<std::mutex> lock(_mutex);
+        _workSignal = std::move(registration);
+    }
     void SetConfigurationStore(IWiFiConfigurationStore* store) { std::lock_guard<std::mutex> lock(_mutex); _configurationStore = store; }
     IWiFiConfigurationStore* ConfigurationStore() const { std::lock_guard<std::mutex> lock(_mutex); return _configurationStore; }
 
@@ -337,19 +341,19 @@ public:
         return changed;
     }
 
-    void OnModeChanged(ModeCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _modeCallback = std::move(cb); }
-    void OnClientStateChanged(ClientCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _clientCallback = std::move(cb); }
-    void OnAccessPointStateChanged(AccessPointCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _apCallback = std::move(cb); }
-    void OnAPUntilClientStateChanged(APUntilClientCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _apUntilClientCallback = std::move(cb); }
-    void OnScanStateChanged(ScanStateCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _scanStateCallback = std::move(cb); }
-    void OnScanCompleted(ScanCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _scanCallback = std::move(cb); }
-    void OnAccessPointStationConnected(StationCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _stationConnected = std::move(cb); }
-    void OnAccessPointStationDisconnected(StationCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _stationDisconnected = std::move(cb); }
-    void OnClientIPAddressAcquired(IPAddressCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _ipAcquired = std::move(cb); }
-    void OnClientIPAddressLost(IPLostCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _ipLost = std::move(cb); }
-    void OnClientNetworkSelectionChanged(SelectionCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _selectionCallback = std::move(cb); }
-    void OnClientNetworkSelected(SelectedNetworkCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _selectedCallback = std::move(cb); }
-    void OnClientNoKnownNetworkAvailable(SimpleCallback cb) { std::lock_guard<std::mutex> lock(_callbackMutex); _noKnownNetworkCallback = std::move(cb); }
+    void OnModeChanged(ModeCallback cb) { SetCallback(_modeCallback, std::move(cb)); }
+    void OnClientStateChanged(ClientCallback cb) { SetCallback(_clientCallback, std::move(cb)); }
+    void OnAccessPointStateChanged(AccessPointCallback cb) { SetCallback(_apCallback, std::move(cb)); }
+    void OnAPUntilClientStateChanged(APUntilClientCallback cb) { SetCallback(_apUntilClientCallback, std::move(cb)); }
+    void OnScanStateChanged(ScanStateCallback cb) { SetCallback(_scanStateCallback, std::move(cb)); }
+    void OnScanCompleted(ScanCallback cb) { SetCallback(_scanCallback, std::move(cb)); }
+    void OnAccessPointStationConnected(StationCallback cb) { SetCallback(_stationConnected, std::move(cb)); }
+    void OnAccessPointStationDisconnected(StationCallback cb) { SetCallback(_stationDisconnected, std::move(cb)); }
+    void OnClientIPAddressAcquired(IPAddressCallback cb) { SetCallback(_ipAcquired, std::move(cb)); }
+    void OnClientIPAddressLost(IPLostCallback cb) { SetCallback(_ipLost, std::move(cb)); }
+    void OnClientNetworkSelectionChanged(SelectionCallback cb) { SetCallback(_selectionCallback, std::move(cb)); }
+    void OnClientNetworkSelected(SelectedNetworkCallback cb) { SetCallback(_selectedCallback, std::move(cb)); }
+    void OnClientNoKnownNetworkAvailable(SimpleCallback cb) { SetCallback(_noKnownNetworkCallback, std::move(cb)); }
 
     WiFiStatus ProcessOnce() {
         std::lock_guard<std::recursive_mutex> transitionLock(_radioTransitionMutex);
@@ -386,8 +390,8 @@ public:
         }
         NotifyStateTransitions(before, next);
         if (scanCompleted) {
-            auto cb = CopyCallback(_scanCallback);
-            if (cb) cb(scan);
+            auto cb = SnapshotCallback(_scanCallback);
+            if (cb) (*cb)(scan);
             _observable->ScanComplete(scan);
             _radioObservable->ScanCompleted(radioAfter);
             HandleCompletedScan(scan);
@@ -401,13 +405,43 @@ public:
     WiFiStatus Poll() { return ProcessOnce(); }
 
 private:
+    template<typename TCallback>
+    using CallbackRegistration = std::shared_ptr<const TCallback>;
+
+    template<typename TCallback>
+    static CallbackRegistration<TCallback> MakeCallbackRegistration(TCallback callback) {
+        if (!callback) return {};
+        return System::Memory::MakeShared<
+            TCallback,
+            System::Memory::MemoryPolicy::ExternalPreferred
+        >(std::move(callback));
+    }
+
+    template<typename TCallback>
+    void SetCallback(CallbackRegistration<TCallback>& target, TCallback callback) {
+        auto registration = MakeCallbackRegistration(std::move(callback));
+        std::lock_guard<std::mutex> lock(_callbackMutex);
+        target = std::move(registration);
+    }
+
+    template<typename TCallback>
+    CallbackRegistration<TCallback> SnapshotCallback(
+        const CallbackRegistration<TCallback>& callback
+    ) const {
+        std::lock_guard<std::mutex> lock(_callbackMutex);
+        return callback;
+    }
+
     static bool UsesClient(WiFiMode mode) {
         return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient || mode == WiFiMode::APUntilClient;
     }
     uint64_t NowMilliseconds() const { return _clock(); }
     template<typename F> WiFiStatus WithPlatform(F&& op) { std::lock_guard<std::mutex> lock(_platformMutex); return op(); }
-    template<typename T> T CopyCallback(const T& cb) const { std::lock_guard<std::mutex> lock(_callbackMutex); return cb; }
-    void SignalWork() { WorkSignal signal; { std::lock_guard<std::mutex> lock(_mutex); signal = _workSignal; } if (signal) signal(); }
+    void SignalWork() {
+        CallbackRegistration<WorkSignal> signal;
+        { std::lock_guard<std::mutex> lock(_mutex); signal = _workSignal; }
+        if (signal) (*signal)();
+    }
 
     WiFiRadioState ReadRadioState() const {
         std::lock_guard<std::mutex> lock(_platformMutex);
@@ -448,7 +482,7 @@ private:
         ClientNetworkSelectionRuntimeState before, after;
         { std::lock_guard<std::mutex> lock(_mutex); before = _selectionState; _selectionState.State = state; after = _selectionState; }
         if (before.State != after.State) {
-            auto cb = CopyCallback(_selectionCallback); if (cb) cb(before, after);
+            auto cb = SnapshotCallback(_selectionCallback); if (cb) (*cb)(before, after);
             _observable->Selection(before, after);
         }
     }
@@ -466,7 +500,7 @@ private:
         }
         if (before.State != after.State || before.FallbackAccessPointActive != after.FallbackAccessPointActive ||
             before.FallbackDeadlineMilliseconds != after.FallbackDeadlineMilliseconds || before.NextRetryMilliseconds != after.NextRetryMilliseconds) {
-            auto cb = CopyCallback(_apUntilClientCallback); if (cb) cb(before, after);
+            auto cb = SnapshotCallback(_apUntilClientCallback); if (cb) (*cb)(before, after);
             _observable->APUntilClient(before, after);
         }
     }
@@ -524,7 +558,7 @@ private:
         }
         if (noCandidates) {
             SetSelectionState(ClientNetworkSelectionState::NoKnownNetworkAvailable);
-            auto cb = CopyCallback(_noKnownNetworkCallback); if (cb) cb();
+            auto cb = SnapshotCallback(_noKnownNetworkCallback); if (cb) (*cb)();
             _observable->NoKnownNetwork();
             return;
         }
@@ -550,7 +584,7 @@ private:
             }
         }
         if (!available) { SetSelectionState(ClientNetworkSelectionState::Exhausted); return WiFiStatus::InvalidConfiguration; }
-        auto cb = CopyCallback(_selectedCallback); if (cb) cb(candidate);
+        auto cb = SnapshotCallback(_selectedCallback); if (cb) (*cb)(candidate);
         _observable->Selected(candidate);
         SetSelectionState(ClientNetworkSelectionState::Connecting);
         const auto result = ExecuteRadioTransition(
@@ -665,18 +699,18 @@ private:
     }
 
     void NotifyStateTransitions(const WiFiRuntimeState& before, const WiFiRuntimeState& next) {
-        if (before.Mode != next.Mode) { auto cb = CopyCallback(_modeCallback); if (cb) cb(before.Mode, next.Mode); _observable->Mode(before.Mode, next.Mode); }
-        if (before.Client.State != next.Client.State || before.Client.Network.Address != next.Client.Network.Address) { auto cb = CopyCallback(_clientCallback); if (cb) cb(before.Client, next.Client); _observable->Client(before.Client, next.Client); }
-        if (before.AccessPoint.State != next.AccessPoint.State || before.AccessPoint.ConnectedStations != next.AccessPoint.ConnectedStations) { auto cb = CopyCallback(_apCallback); if (cb) cb(before.AccessPoint, next.AccessPoint); _observable->AccessPoint(before.AccessPoint, next.AccessPoint); }
-        if (before.Scan != next.Scan) { auto cb = CopyCallback(_scanStateCallback); if (cb) cb(before.Scan, next.Scan); _observable->ScanState(before.Scan, next.Scan); }
+        if (before.Mode != next.Mode) { auto cb = SnapshotCallback(_modeCallback); if (cb) (*cb)(before.Mode, next.Mode); _observable->Mode(before.Mode, next.Mode); }
+        if (before.Client.State != next.Client.State || before.Client.Network.Address != next.Client.Network.Address) { auto cb = SnapshotCallback(_clientCallback); if (cb) (*cb)(before.Client, next.Client); _observable->Client(before.Client, next.Client); }
+        if (before.AccessPoint.State != next.AccessPoint.State || before.AccessPoint.ConnectedStations != next.AccessPoint.ConnectedStations) { auto cb = SnapshotCallback(_apCallback); if (cb) (*cb)(before.AccessPoint, next.AccessPoint); _observable->AccessPoint(before.AccessPoint, next.AccessPoint); }
+        if (before.Scan != next.Scan) { auto cb = SnapshotCallback(_scanStateCallback); if (cb) (*cb)(before.Scan, next.Scan); _observable->ScanState(before.Scan, next.Scan); }
     }
 
     void NotifyPlatformEvent(const WiFiPlatformEvent& event) {
         switch (event.Kind) {
-            case WiFiPlatformEventKind::AccessPointStationConnected: { auto cb = CopyCallback(_stationConnected); if (cb) cb(event.Station); _observable->APStationConnected(event.Station); break; }
-            case WiFiPlatformEventKind::AccessPointStationDisconnected: { auto cb = CopyCallback(_stationDisconnected); if (cb) cb(event.Station); _observable->APStationDisconnected(event.Station); break; }
-            case WiFiPlatformEventKind::ClientIPAddressAcquired: { auto cb = CopyCallback(_ipAcquired); if (cb) cb(event.Network); _observable->IP(event.Network); break; }
-            case WiFiPlatformEventKind::ClientIPAddressLost: { auto cb = CopyCallback(_ipLost); if (cb) cb(); _observable->IPLost(); break; }
+            case WiFiPlatformEventKind::AccessPointStationConnected: { auto cb = SnapshotCallback(_stationConnected); if (cb) (*cb)(event.Station); _observable->APStationConnected(event.Station); break; }
+            case WiFiPlatformEventKind::AccessPointStationDisconnected: { auto cb = SnapshotCallback(_stationDisconnected); if (cb) (*cb)(event.Station); _observable->APStationDisconnected(event.Station); break; }
+            case WiFiPlatformEventKind::ClientIPAddressAcquired: { auto cb = SnapshotCallback(_ipAcquired); if (cb) (*cb)(event.Network); _observable->IP(event.Network); break; }
+            case WiFiPlatformEventKind::ClientIPAddressLost: { auto cb = SnapshotCallback(_ipLost); if (cb) (*cb)(); _observable->IPLost(); break; }
         }
     }
 
@@ -695,24 +729,24 @@ private:
     ScanStorage _lastScanResults;
     CandidateStorage _eligibleCandidates;
     std::size_t _nextCandidateIndex = 0;
-    WorkSignal _workSignal;
+    CallbackRegistration<WorkSignal> _workSignal;
     std::shared_ptr<ManagerObservable> _observable;
     std::shared_ptr<RadioObservable> _radioObservable;
     WiFiRadioState _lastRadioState{};
     bool _haveRadioState = false;
-    ModeCallback _modeCallback;
-    ClientCallback _clientCallback;
-    AccessPointCallback _apCallback;
-    APUntilClientCallback _apUntilClientCallback;
-    ScanStateCallback _scanStateCallback;
-    ScanCallback _scanCallback;
-    StationCallback _stationConnected;
-    StationCallback _stationDisconnected;
-    IPAddressCallback _ipAcquired;
-    IPLostCallback _ipLost;
-    SelectionCallback _selectionCallback;
-    SelectedNetworkCallback _selectedCallback;
-    SimpleCallback _noKnownNetworkCallback;
+    CallbackRegistration<ModeCallback> _modeCallback;
+    CallbackRegistration<ClientCallback> _clientCallback;
+    CallbackRegistration<AccessPointCallback> _apCallback;
+    CallbackRegistration<APUntilClientCallback> _apUntilClientCallback;
+    CallbackRegistration<ScanStateCallback> _scanStateCallback;
+    CallbackRegistration<ScanCallback> _scanCallback;
+    CallbackRegistration<StationCallback> _stationConnected;
+    CallbackRegistration<StationCallback> _stationDisconnected;
+    CallbackRegistration<IPAddressCallback> _ipAcquired;
+    CallbackRegistration<IPLostCallback> _ipLost;
+    CallbackRegistration<SelectionCallback> _selectionCallback;
+    CallbackRegistration<SelectedNetworkCallback> _selectedCallback;
+    CallbackRegistration<SimpleCallback> _noKnownNetworkCallback;
 };
 
 } // namespace ESPressio::WiFi
