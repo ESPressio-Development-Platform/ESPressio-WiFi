@@ -1,11 +1,9 @@
 name: WiFi Tests
-
 on:
   push:
     branches: [main, 'feature/**', 'chore/**']
   pull_request:
     branches: [main]
-
 jobs:
   host:
     runs-on: ubuntu-latest
@@ -14,16 +12,13 @@ jobs:
       - run: cmake -S . -B build
       - run: cmake --build build --parallel
       - run: ctest --test-dir build --output-on-failure
-
   esp32:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: project/ESPressio-WiFi
+        with: {path: project/ESPressio-WiFi}
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+        with: {python-version: '3.x'}
       - run: pip install platformio
       - name: Create integration consumer
         run: |
@@ -39,21 +34,19 @@ jobs:
           board = esp32dev
           framework = arduino
           extra_scripts = pre:network_include.py
-          build_flags =
-              -std=gnu++17
-              -fno-rtti
-              -DESPRESSIO_SERIALIZATION_PREFER_PSRAM
+          build_flags = -std=gnu++17 -fno-rtti -DESPRESSIO_SERIALIZATION_PREFER_PSRAM
           build_unflags = -std=gnu++11 -frtti
           lib_ldf_mode = deep+
           lib_deps =
               ../ESPressio-WiFi
+              https://github.com/ESPressio-Development-Platform/ESPressio-System.git#feature/1-system-memory-policy
               https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#feature/16-rtti-free-observer-registry
               https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#optimisation/25-psram-buffers
               https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#main
               https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#main
               https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#optimisation/69-resource-footprint
               https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#optimisation/23-memory-policy-transient-buffers
               https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#feature/57-rtti-free-memory-efficiency
               https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#feature/30-async-command-routing
           EOF
@@ -73,22 +66,7 @@ jobs:
           WiFi::WiFiWorker worker(manager);
           WiFi::WiFiCommandHandler commands;
           Event::WiFiEventBridge events;
-          void setup() {
-              WiFi::WiFiConfiguration config;
-              config.Mode = WiFi::WiFiMode::APUntilClient;
-              config.AccessPoint.SSID = "ESPressio-Test";
-              config.Client.Enabled = true;
-              WiFi::ClientNetworkProfile preferred;
-              preferred.SSID = "Preferred";
-              preferred.Password = "password123";
-              preferred.Priority = 200;
-              config.Client.Networks.push_back(std::move(preferred));
-              (void)manager.Configure(std::move(config));
-              (void)commands.Initialize(Command::CommandRegistry::GetInstance(), manager);
-              (void)events.Initialize(manager);
-              (void)worker.Initialize();
-              (void)worker.Start();
-          }
-          void loop() { delay(1000); }
+          void setup(){ WiFi::WiFiConfiguration config; config.Mode=WiFi::WiFiMode::APUntilClient; config.AccessPoint.SSID="ESPressio-Test"; config.Client.Enabled=true; WiFi::ClientNetworkProfile preferred; preferred.SSID="Preferred"; preferred.Password="password123"; preferred.Priority=200; config.Client.Networks.push_back(std::move(preferred)); (void)manager.Configure(std::move(config)); (void)commands.Initialize(Command::CommandRegistry::GetInstance(),manager); (void)events.Initialize(manager); (void)worker.Initialize(); (void)worker.Start(); }
+          void loop(){delay(1000);}
           EOF
       - run: pio run -d project/consumer
