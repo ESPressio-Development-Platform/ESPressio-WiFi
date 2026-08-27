@@ -86,3 +86,28 @@ The existing ESP32 integration consumer configures `APUntilClient` with a rememb
 - `86af5eb` — `optimise(#23): retain compact ESP32 WiFi platform configuration`
 - `3da55c3` — `chore(#23): validate against active Threads optimisation branch`
 - `e25717f` — `test(#23): exercise active memory-efficiency branches`
+
+## 2026-08-27 — System-backed WiFi metadata and reduced configuration copying (#24)
+
+Phase 9 of the coordinated memory-policy programme moves eligible ESPressio-owned dynamic WiFi bookkeeping to the System abstraction without changing the Serializable public configuration schema.
+
+### Changes
+- retained scan-result and eligible-candidate storage now uses ESPressio-System `ExternalPreferred` containers;
+- manager and radio Observable allocations use the System external-preferred allocator;
+- added `WithConfiguration()` for synchronous lock-scoped read access where a caller does not require an independent configuration snapshot;
+- candidate construction reads remembered profiles in place under the manager lock instead of first copying the complete `WiFiConfiguration`;
+- recurring APUntilClient/selection paths now snapshot only the scalar policy values they need instead of copying the complete configuration and remembered-network collection;
+- completed candidate lists are moved into retained storage rather than copied;
+- the candidate-empty decision is captured under the manager lock, avoiding an unlocked read of retained candidate storage;
+- independent snapshots crossing into storage/platform/user ownership remain copies deliberately.
+
+### Schema boundary
+The public Serializable `WiFiConfiguration` and its `std::string`/`std::vector` member types remain unchanged in this phase. Changing those types would be a serialization/API migration rather than a memory-placement implementation detail. The manager instead reduces duplicate ownership and uses System-backed storage for its independent dynamic result/candidate metadata.
+
+### Dependency policy
+The current working manifest resolves Threads from `optimisation/69-resource-footprint` and ESPressio-System from `feature/1-system-memory-policy`; no release version number changed.
+
+### Commits
+- `26df43b` — main manager storage/copy-reduction implementation
+- `c3e23d3` — working-branch System dependency metadata
+- `f522e7a` — lock-boundary correction for candidate empty-state inspection
