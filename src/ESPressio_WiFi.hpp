@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include <ESPressio_Memory.hpp>
 #include <ESPressio_ThreadSafeObservable.hpp>
 #include "ESPressio_IWiFiObserver.hpp"
 #include "ESPressio_IWiFiRadioObserver.hpp"
@@ -47,6 +48,15 @@ public:
 
 class WiFiManager {
 private:
+    using ScanStorage = System::Memory::Vector<
+        ScanResult,
+        System::Memory::MemoryPolicy::ExternalPreferred
+    >;
+    using CandidateStorage = System::Memory::Vector<
+        ClientNetworkCandidate,
+        System::Memory::MemoryPolicy::ExternalPreferred
+    >;
+
     class ManagerObservable final : public Observable::ThreadSafeObservable {
         template<typename F> void Notify(F&& callback) {
             ExecuteNotification([&](NotificationContext& n) {
@@ -89,12 +99,8 @@ private:
         void StateChanged(const WiFiRadioState& before, const WiFiRadioState& after) {
             Notify([&](IWiFiRadioObserver* o){ o->OnWiFiRadioStateChanged(before, after); });
         }
-        void ScanBeginning(const WiFiRadioState& before) {
-            Notify([&](IWiFiRadioObserver* o){ o->OnWiFiRadioScanBeginning(before); });
-        }
-        void ScanCompleted(const WiFiRadioState& after) {
-            Notify([&](IWiFiRadioObserver* o){ o->OnWiFiRadioScanCompleted(after); });
-        }
+        void ScanBeginning(const WiFiRadioState& before) { Notify([&](IWiFiRadioObserver* o){ o->OnWiFiRadioScanBeginning(before); }); }
+        void ScanCompleted(const WiFiRadioState& after) { Notify([&](IWiFiRadioObserver* o){ o->OnWiFiRadioScanCompleted(after); }); }
     };
 
 public:
@@ -118,12 +124,22 @@ public:
           _clock(clock ? std::move(clock) : Clock([]() -> uint64_t {
               return static_cast<uint64_t>(
                   std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now().time_since_epoch()
-                  ).count()
-              );
-          })) {}
+                      std::chrono::steady_clock::now().time_since_epoch()).count());
+          })),
+          _observable(System::Memory::MakeShared<ManagerObservable, System::Memory::MemoryPolicy::ExternalPreferred>()),
+          _radioObservable(System::Memory::MakeShared<RadioObservable, System::Memory::MemoryPolicy::ExternalPreferred>()) {}
 
-    WiFiConfiguration Configuration() const { std::lock_guard<std::mutex> lock(_mutex); return _configuration; }
+    WiFiConfiguration Configuration() const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return _configuration;
+    }
+
+    template<typename Callback>
+    decltype(auto) WithConfiguration(Callback&& callback) const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return std::forward<Callback>(callback)(_configuration);
+    }
+
     WiFiRuntimeState State() const {
         std::lock_guard<std::mutex> lock(_mutex);
         auto state = _state;
@@ -131,9 +147,19 @@ public:
         state.APUntilClient = _apUntilClientState;
         return state;
     }
+
     WiFiRadioState RadioState() const { return ReadRadioState(); }
-    std::vector<ScanResult> LastScanResults() const { std::lock_guard<std::mutex> lock(_mutex); return _lastScanResults; }
-    std::vector<ClientNetworkCandidate> EligibleClientNetworks() const { std::lock_guard<std::mutex> lock(_mutex); return _eligibleCandidates; }
+
+    std::vector<ScanResult> LastScanResults() const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return std::vector<ScanResult>(_lastScanResults.begin(), _lastScanResults.end());
+    }
+
+    std::vector<ClientNetworkCandidate> EligibleClientNetworks() const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return std::vector<ClientNetworkCandidate>(_eligibleCandidates.begin(), _eligibleCandidates.end());
+    }
+
     void SetWorkSignal(WorkSignal signal) { std::lock_guard<std::mutex> lock(_mutex); _workSignal = std::move(signal); }
     void SetConfigurationStore(IWiFiConfigurationStore* store) { std::lock_guard<std::mutex> lock(_mutex); _configurationStore = store; }
     IWiFiConfigurationStore* ConfigurationStore() const { std::lock_guard<std::mutex> lock(_mutex); return _configurationStore; }
@@ -141,7 +167,11 @@ public:
     WiFiConfigurationStoreResult SaveConfiguration() {
         IWiFiConfigurationStore* store = nullptr;
         WiFiConfiguration snapshot;
-        { std::lock_guard<std::mutex> lock(_mutex); store = _configurationStore; snapshot = _configuration; }
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            store = _configurationStore;
+            snapshot = _configuration; // independent snapshot required across storage call
+        }
         if (!store) return WiFiConfigurationStoreResult::Fail(WiFiConfigurationStoreStatus::NotConfigured, "No WiFi configuration store is configured");
         return store->Save(snapshot);
     }
@@ -197,7 +227,6 @@ public:
             scanOnStartup = UsesClient(_configuration.Mode) && _configuration.Client.Enabled && hasRemembered &&
                 _configuration.Client.Selection.AutomaticSelection && _configuration.Client.Selection.ScanOnStartup;
         }
-
         if (seeking) SetAPUntilClientState(APUntilClientState::SeekingClient, false, fallbackDeadline, 0);
         if (immediateFallback) (void)ActivateFallbackAccessPoint();
         else if (scanOnStartup) (void)Scan();
@@ -248,11 +277,15 @@ public:
     }
 
     WiFiStatus RetryKnownNetworksNow() {
-        WiFiConfiguration config;
-        { std::lock_guard<std::mutex> lock(_mutex); config = _configuration; }
-        if (config.Mode != WiFiMode::APUntilClient || !config.Client.Enabled ||
-            !config.Client.Selection.AutomaticSelection || config.Client.Networks.empty()) return WiFiStatus::InvalidConfiguration;
-        return Scan();
+        bool valid = false;
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            valid = _configuration.Mode == WiFiMode::APUntilClient &&
+                _configuration.Client.Enabled &&
+                _configuration.Client.Selection.AutomaticSelection &&
+                !_configuration.Client.Networks.empty();
+        }
+        return valid ? Scan() : WiFiStatus::InvalidConfiguration;
     }
 
     bool AddOrUpdateClientNetwork(ClientNetworkProfile profile) {
@@ -262,10 +295,12 @@ public:
         uint64_t deadline = 0;
         {
             std::lock_guard<std::mutex> lock(_mutex);
-            auto it = std::find_if(_configuration.Client.Networks.begin(), _configuration.Client.Networks.end(), [&](const ClientNetworkProfile& p){ return p.SSID == profile.SSID; });
+            auto it = std::find_if(_configuration.Client.Networks.begin(), _configuration.Client.Networks.end(),
+                [&](const ClientNetworkProfile& p){ return p.SSID == profile.SSID; });
             if (it == _configuration.Client.Networks.end()) _configuration.Client.Networks.push_back(std::move(profile));
             else *it = std::move(profile);
-            retry = _configuration.Mode == WiFiMode::APUntilClient && _configuration.Client.Enabled && _configuration.Client.Selection.AutomaticSelection;
+            retry = _configuration.Mode == WiFiMode::APUntilClient && _configuration.Client.Enabled &&
+                _configuration.Client.Selection.AutomaticSelection;
             if (_configuration.Mode == WiFiMode::APUntilClient && !_apUntilClientState.FallbackAccessPointActive &&
                 _apUntilClientState.FallbackDeadlineMilliseconds == 0) {
                 deadline = NowMilliseconds() + _configuration.APUntilClient.FallbackTimeoutMilliseconds;
@@ -285,7 +320,8 @@ public:
             std::lock_guard<std::mutex> lock(_mutex);
             auto& networks = _configuration.Client.Networks;
             const auto old = networks.size();
-            networks.erase(std::remove_if(networks.begin(), networks.end(), [&](const ClientNetworkProfile& p){ return p.SSID == ssid; }), networks.end());
+            networks.erase(std::remove_if(networks.begin(), networks.end(),
+                [&](const ClientNetworkProfile& p){ return p.SSID == ssid; }), networks.end());
             removed = networks.size() != old;
             immediateFallback = removed && _configuration.Mode == WiFiMode::APUntilClient && networks.empty();
         }
@@ -342,7 +378,11 @@ public:
             next.APUntilClient = _apUntilClientState;
             scanCompleted = before.Scan != ScanState::Complete && next.Scan == ScanState::Complete;
             _state = next;
-            if (scanCompleted) _lastScanResults = scan;
+            if (scanCompleted) {
+                _lastScanResults.clear();
+                _lastScanResults.reserve(scan.size());
+                _lastScanResults.insert(_lastScanResults.end(), scan.begin(), scan.end());
+            }
         }
         NotifyStateTransitions(before, next);
         if (scanCompleted) {
@@ -361,7 +401,9 @@ public:
     WiFiStatus Poll() { return ProcessOnce(); }
 
 private:
-    static bool UsesClient(WiFiMode mode) { return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient || mode == WiFiMode::APUntilClient; }
+    static bool UsesClient(WiFiMode mode) {
+        return mode == WiFiMode::Client || mode == WiFiMode::AccessPointClient || mode == WiFiMode::APUntilClient;
+    }
     uint64_t NowMilliseconds() const { return _clock(); }
     template<typename F> WiFiStatus WithPlatform(F&& op) { std::lock_guard<std::mutex> lock(_platformMutex); return op(); }
     template<typename T> T CopyCallback(const T& cb) const { std::lock_guard<std::mutex> lock(_callbackMutex); return cb; }
@@ -390,7 +432,6 @@ private:
         std::lock_guard<std::recursive_mutex> transitionLock(_radioTransitionMutex);
         const WiFiRadioState before = ReadRadioState();
         _radioObservable->TransitionBeginning(before, reason);
-
         WiFiStatus status = WiFiStatus::PlatformError;
         WiFiRadioState after;
         {
@@ -398,7 +439,6 @@ private:
             status = op();
             after = _platform.GetRadioState();
         }
-
         _radioObservable->TransitionCompleted(before, after, reason);
         PublishRadioState(after);
         return status;
@@ -431,20 +471,26 @@ private:
         }
     }
 
-    std::vector<ClientNetworkCandidate> BuildCandidates(const std::vector<ScanResult>& scan) const {
-        WiFiConfiguration config;
-        { std::lock_guard<std::mutex> lock(_mutex); config = _configuration; }
-        std::vector<ClientNetworkCandidate> candidates;
-        for (std::size_t i = 0; i < config.Client.Networks.size(); ++i) {
-            const auto& p = config.Client.Networks[i];
+    CandidateStorage BuildCandidates(const std::vector<ScanResult>& scan) const {
+        CandidateStorage candidates;
+        std::lock_guard<std::mutex> lock(_mutex);
+        candidates.reserve(_configuration.Client.Networks.size());
+        for (std::size_t i = 0; i < _configuration.Client.Networks.size(); ++i) {
+            const auto& p = _configuration.Client.Networks[i];
             if (!p.Enabled || p.SSID.empty()) continue;
             const ScanResult* strongest = nullptr;
-            for (const auto& visible : scan)
+            for (const auto& visible : scan) {
                 if (visible.SSID == p.SSID && (!strongest || visible.RSSI > strongest->RSSI)) strongest = &visible;
+            }
             if (!strongest) continue;
             ClientNetworkCandidate c;
-            c.SSID = p.SSID; c.BSSID = strongest->BSSID; c.Priority = p.Priority; c.RSSI = strongest->RSSI;
-            c.Channel = strongest->Channel; c.ProfileIndex = i; candidates.push_back(std::move(c));
+            c.SSID = p.SSID;
+            c.BSSID = strongest->BSSID;
+            c.Priority = p.Priority;
+            c.RSSI = strongest->RSSI;
+            c.Channel = strongest->Channel;
+            c.ProfileIndex = i;
+            candidates.push_back(std::move(c));
         }
         std::sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) {
             if (a.Priority != b.Priority) return a.Priority > b.Priority;
@@ -455,18 +501,26 @@ private:
     }
 
     void HandleCompletedScan(const std::vector<ScanResult>& scan) {
-        WiFiConfiguration config;
-        ClientState clientState;
-        { std::lock_guard<std::mutex> lock(_mutex); config = _configuration; clientState = _state.Client.State; }
-        if (!UsesClient(config.Mode) || !config.Client.Enabled || !config.Client.Selection.AutomaticSelection || config.Client.Networks.empty() || clientState == ClientState::Connected) return;
+        bool shouldSelect = false;
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            shouldSelect = UsesClient(_configuration.Mode) && _configuration.Client.Enabled &&
+                _configuration.Client.Selection.AutomaticSelection && !_configuration.Client.Networks.empty() &&
+                _state.Client.State != ClientState::Connected;
+        }
+        if (!shouldSelect) return;
+
         auto candidates = BuildCandidates(scan);
         {
             std::lock_guard<std::mutex> lock(_mutex);
-            _eligibleCandidates = candidates; _nextCandidateIndex = 0;
-            _selectionState.EligibleCandidateCount = candidates.size();
-            _selectionState.SelectedSSID.clear(); _selectionState.SelectedPriority = 0; _selectionState.SelectedProfileIndex = 0;
+            _eligibleCandidates = std::move(candidates);
+            _nextCandidateIndex = 0;
+            _selectionState.EligibleCandidateCount = _eligibleCandidates.size();
+            _selectionState.SelectedSSID.clear();
+            _selectionState.SelectedPriority = 0;
+            _selectionState.SelectedProfileIndex = 0;
         }
-        if (candidates.empty()) {
+        if (_eligibleCandidates.empty()) {
             SetSelectionState(ClientNetworkSelectionState::NoKnownNetworkAvailable);
             auto cb = CopyCallback(_noKnownNetworkCallback); if (cb) cb();
             _observable->NoKnownNetwork();
@@ -485,7 +539,7 @@ private:
             if (_nextCandidateIndex < _eligibleCandidates.size()) {
                 candidate = _eligibleCandidates[_nextCandidateIndex++];
                 if (candidate.ProfileIndex < _configuration.Client.Networks.size()) {
-                    profile = _configuration.Client.Networks[candidate.ProfileIndex];
+                    profile = _configuration.Client.Networks[candidate.ProfileIndex]; // independent platform-call snapshot
                     _selectionState.SelectedSSID = candidate.SSID;
                     _selectionState.SelectedPriority = candidate.Priority;
                     _selectionState.SelectedProfileIndex = candidate.ProfileIndex;
@@ -497,19 +551,31 @@ private:
         auto cb = CopyCallback(_selectedCallback); if (cb) cb(candidate);
         _observable->Selected(candidate);
         SetSelectionState(ClientNetworkSelectionState::Connecting);
-        const auto result = ExecuteRadioTransition(WiFiRadioTransitionReason::ClientConnect, [&](){ return _platform.ConnectClient(profile); });
+        const auto result = ExecuteRadioTransition(
+            WiFiRadioTransitionReason::ClientConnect,
+            [&](){ return _platform.ConnectClient(profile); }
+        );
         SignalWork();
         return result;
     }
 
     WiFiStatus ActivateFallbackAccessPoint() {
-        APUntilClientRuntimeState state;
-        WiFiConfiguration config;
-        { std::lock_guard<std::mutex> lock(_mutex); state = _apUntilClientState; config = _configuration; }
-        if (state.FallbackAccessPointActive) return WiFiStatus::Success;
-        const auto result = ExecuteRadioTransition(WiFiRadioTransitionReason::AccessPointStart, [&](){ return _platform.StartAccessPoint(); });
+        bool alreadyActive = false;
+        bool networksEmpty = true;
+        uint32_t retryInterval = 0;
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            alreadyActive = _apUntilClientState.FallbackAccessPointActive;
+            networksEmpty = _configuration.Client.Networks.empty();
+            retryInterval = _configuration.APUntilClient.RetryScanIntervalMilliseconds;
+        }
+        if (alreadyActive) return WiFiStatus::Success;
+        const auto result = ExecuteRadioTransition(
+            WiFiRadioTransitionReason::AccessPointStart,
+            [&](){ return _platform.StartAccessPoint(); }
+        );
         if (result == WiFiStatus::Success) {
-            const auto nextRetry = config.Client.Networks.empty() ? 0 : NowMilliseconds() + config.APUntilClient.RetryScanIntervalMilliseconds;
+            const auto nextRetry = networksEmpty ? 0 : NowMilliseconds() + retryInterval;
             SetAPUntilClientState(APUntilClientState::FallbackAccessPoint, true, 0, nextRetry);
         }
         SignalWork();
@@ -517,20 +583,35 @@ private:
     }
 
     void ArmFallbackAfterClientLoss() {
-        WiFiConfiguration config;
-        { std::lock_guard<std::mutex> lock(_mutex); config = _configuration; }
-        if (config.Mode != WiFiMode::APUntilClient) return;
-        if (config.Client.Networks.empty()) { (void)ActivateFallbackAccessPoint(); return; }
-        const auto deadline = NowMilliseconds() + config.APUntilClient.FallbackTimeoutMilliseconds;
-        SetAPUntilClientState(APUntilClientState::SeekingClient, false, deadline, 0);
+        WiFiMode mode;
+        bool networksEmpty;
+        uint32_t timeout;
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            mode = _configuration.Mode;
+            networksEmpty = _configuration.Client.Networks.empty();
+            timeout = _configuration.APUntilClient.FallbackTimeoutMilliseconds;
+        }
+        if (mode != WiFiMode::APUntilClient) return;
+        if (networksEmpty) { (void)ActivateFallbackAccessPoint(); return; }
+        SetAPUntilClientState(APUntilClientState::SeekingClient, false, NowMilliseconds() + timeout, 0);
     }
 
     void HandleAPUntilClientTimers() {
-        WiFiConfiguration config;
+        WiFiMode mode;
+        bool networksEmpty;
+        uint32_t retryInterval;
         APUntilClientRuntimeState lifecycle;
         ClientState clientState;
-        { std::lock_guard<std::mutex> lock(_mutex); config = _configuration; lifecycle = _apUntilClientState; clientState = _state.Client.State; }
-        if (config.Mode != WiFiMode::APUntilClient) return;
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            mode = _configuration.Mode;
+            networksEmpty = _configuration.Client.Networks.empty();
+            retryInterval = _configuration.APUntilClient.RetryScanIntervalMilliseconds;
+            lifecycle = _apUntilClientState;
+            clientState = _state.Client.State;
+        }
+        if (mode != WiFiMode::APUntilClient) return;
         const auto now = NowMilliseconds();
         if (clientState == ClientState::Connected) {
             if (lifecycle.FallbackAccessPointActive)
@@ -539,36 +620,46 @@ private:
                 SetAPUntilClientState(APUntilClientState::ClientConnected, false, 0, 0);
             return;
         }
-        if (!lifecycle.FallbackAccessPointActive && (config.Client.Networks.empty() ||
+        if (!lifecycle.FallbackAccessPointActive && (networksEmpty ||
             (lifecycle.FallbackDeadlineMilliseconds != 0 && now >= lifecycle.FallbackDeadlineMilliseconds))) {
             (void)ActivateFallbackAccessPoint();
             return;
         }
-        if (lifecycle.FallbackAccessPointActive && !config.Client.Networks.empty() &&
+        if (lifecycle.FallbackAccessPointActive && !networksEmpty &&
             lifecycle.NextRetryMilliseconds != 0 && now >= lifecycle.NextRetryMilliseconds) {
-            SetAPUntilClientState(APUntilClientState::FallbackAccessPoint, true, 0,
-                now + config.APUntilClient.RetryScanIntervalMilliseconds);
+            SetAPUntilClientState(APUntilClientState::FallbackAccessPoint, true, 0, now + retryInterval);
             (void)Scan();
         }
     }
 
     void HandleConnectionProgress(ClientState before, ClientState after) {
-        WiFiConfiguration config;
-        { std::lock_guard<std::mutex> lock(_mutex); config = _configuration; }
-        if (config.Mode == WiFiMode::APUntilClient && before == ClientState::Connected && after != ClientState::Connected) {
+        WiFiMode mode;
+        bool automatic;
+        bool networksEmpty;
+        bool tryNext;
+        bool scanOnDisconnect;
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            mode = _configuration.Mode;
+            automatic = _configuration.Client.Selection.AutomaticSelection;
+            networksEmpty = _configuration.Client.Networks.empty();
+            tryNext = _configuration.Client.Selection.TryNextOnFailure;
+            scanOnDisconnect = _configuration.Client.Selection.ScanOnDisconnect;
+        }
+        if (mode == WiFiMode::APUntilClient && before == ClientState::Connected && after != ClientState::Connected) {
             ArmFallbackAfterClientLoss();
         }
-        if (!config.Client.Selection.AutomaticSelection || config.Client.Networks.empty()) return;
+        if (!automatic || networksEmpty) return;
         if (after == ClientState::Connected) {
             SetSelectionState(ClientNetworkSelectionState::Connected);
             HandleAPUntilClientTimers();
             return;
         }
-        if (after == ClientState::Failed && before != ClientState::Failed && config.Client.Selection.TryNextOnFailure) {
-            if (TryNextCandidate() == WiFiStatus::InvalidConfiguration && config.Client.Selection.ScanOnDisconnect) (void)Scan();
+        if (after == ClientState::Failed && before != ClientState::Failed && tryNext) {
+            if (TryNextCandidate() == WiFiStatus::InvalidConfiguration && scanOnDisconnect) (void)Scan();
             return;
         }
-        if (after == ClientState::Disconnected && before != ClientState::Disconnected && config.Client.Selection.ScanOnDisconnect) (void)Scan();
+        if (after == ClientState::Disconnected && before != ClientState::Disconnected && scanOnDisconnect) (void)Scan();
     }
 
     void NotifyStateTransitions(const WiFiRuntimeState& before, const WiFiRuntimeState& next) {
@@ -595,16 +686,16 @@ private:
     mutable std::recursive_mutex _radioTransitionMutex;
     mutable std::mutex _radioStateMutex;
     IWiFiConfigurationStore* _configurationStore = nullptr;
-    WiFiConfiguration _configuration{};
+    WiFiConfiguration _configuration{}; // Serializable public schema remains unchanged.
     WiFiRuntimeState _state{};
     ClientNetworkSelectionRuntimeState _selectionState{};
     APUntilClientRuntimeState _apUntilClientState{};
-    std::vector<ScanResult> _lastScanResults;
-    std::vector<ClientNetworkCandidate> _eligibleCandidates;
+    ScanStorage _lastScanResults;
+    CandidateStorage _eligibleCandidates;
     std::size_t _nextCandidateIndex = 0;
     WorkSignal _workSignal;
-    std::shared_ptr<ManagerObservable> _observable = std::make_shared<ManagerObservable>();
-    std::shared_ptr<RadioObservable> _radioObservable = std::make_shared<RadioObservable>();
+    std::shared_ptr<ManagerObservable> _observable;
+    std::shared_ptr<RadioObservable> _radioObservable;
     WiFiRadioState _lastRadioState{};
     bool _haveRadioState = false;
     ModeCallback _modeCallback;
