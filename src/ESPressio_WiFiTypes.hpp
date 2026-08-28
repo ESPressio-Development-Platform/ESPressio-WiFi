@@ -9,21 +9,25 @@
 
 namespace ESPressio::WiFi {
 
-// APUntilClient is a conditional fallback mode: STA is preferred, while the AP
-// is exposed only until Client connectivity succeeds.
-//
-// Off is the canonical explicit radio-off mode. Disabled is retained as the
-// original 0.1/0.2 compatibility value and has the same platform effect, but
-// new applications and Commands should use Off.
+/// <summary>Application-level Wi-Fi operating mode.</summary>
+/// <remarks>APUntilClient prefers STA connectivity and exposes an AP only as fallback. Off is the canonical explicit radio-off mode; Disabled is retained for compatibility and has the same platform effect.</remarks>
 enum class WiFiMode : uint8_t { Disabled, Client, AccessPoint, AccessPointClient, APUntilClient, Off };
+/// <summary>Runtime state of the client/station interface.</summary>
 enum class ClientState : uint8_t { Disabled, Idle, Connecting, Connected, Reconnecting, Disconnecting, Disconnected, Failed };
+/// <summary>Runtime state of the local access point.</summary>
 enum class AccessPointState : uint8_t { Disabled, Starting, Active, Failed };
+/// <summary>Runtime state of Wi-Fi scanning.</summary>
 enum class ScanState : uint8_t { Idle, Scanning, Complete, Failed };
+/// <summary>Security classification reported for a scanned network.</summary>
 enum class NetworkSecurity : uint8_t { Open, WEP, WPA, WPA2, WPA_WPA2, WPA3, WPA2_WPA3, Unknown };
+/// <summary>Selects dynamic DHCP or configured static addressing.</summary>
 enum class AddressMode : uint8_t { DHCP, Static };
+/// <summary>Runtime state of automatic preferred-client-network selection.</summary>
 enum class ClientNetworkSelectionState : uint8_t { Idle, Scanning, Selecting, Connecting, Connected, NoKnownNetworkAvailable, Exhausted };
+/// <summary>Runtime state of AP-until-client fallback behavior.</summary>
 enum class APUntilClientState : uint8_t { Inactive, SeekingClient, FallbackAccessPoint, ClientConnected };
 
+/// <summary>Authoritative physical mode of the shared Wi-Fi radio.</summary>
 enum class WiFiRadioMode : uint8_t {
     Off = 0,
     Station,
@@ -31,6 +35,7 @@ enum class WiFiRadioMode : uint8_t {
     AccessPointStation
 };
 
+/// <summary>Reason associated with a low-level shared-radio state transition.</summary>
 enum class WiFiRadioTransitionReason : uint8_t {
     Configuration = 0,
     ClientConnect,
@@ -41,19 +46,24 @@ enum class WiFiRadioTransitionReason : uint8_t {
     DriverStateChange
 };
 
+/// <summary>Serializable IPv4 address value.</summary>
 struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     ESPRESSIO_SERIALIZABLE_TYPE(IPv4Address)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+    /// <summary>Address octets in network display order.</summary>
     std::array<uint8_t,4> Octets{};
     IPv4Address() = default;
+    /// <summary>Constructs an IPv4 address from its four octets.</summary>
     IPv4Address(uint8_t a,uint8_t b,uint8_t c,uint8_t d) : Octets{{a,b,c,d}} {}
     ~IPv4Address() = default;
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("octets", Octets))
     bool operator==(const IPv4Address& other) const noexcept { return Octets==other.Octets; }
     bool operator!=(const IPv4Address& other) const noexcept { return !(*this==other); }
+    /// <summary>Returns dotted-decimal text for the address.</summary>
     std::string ToString() const { return std::to_string(Octets[0])+"."+std::to_string(Octets[1])+"."+std::to_string(Octets[2])+"."+std::to_string(Octets[3]); }
 };
 
+/// <summary>Serializable six-octet MAC address value.</summary>
 struct MacAddress final : Serializable::Serializable<MacAddress> {
     ESPRESSIO_SERIALIZABLE_TYPE(MacAddress)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -64,9 +74,8 @@ struct MacAddress final : Serializable::Serializable<MacAddress> {
     bool operator!=(const MacAddress& other) const noexcept { return !(*this==other); }
 };
 
-// Authoritative physical state of the shared 2.4 GHz WiFi radio. This is
-// intentionally separate from WiFiRuntimeState: consumers such as ESP-NOW
-// need native interface/channel/MAC facts, not only application semantics.
+/// <summary>Authoritative physical state of the shared 2.4 GHz Wi-Fi radio.</summary>
+/// <remarks>This intentionally differs from WiFiRuntimeState: infrastructure consumers such as ESP-NOW require native interface, channel, scan, and MAC facts rather than only application semantics.</remarks>
 struct WiFiRadioState {
     WiFiRadioMode Mode = WiFiRadioMode::Off;
     bool StationInterfaceActive = false;
@@ -90,6 +99,7 @@ struct WiFiRadioState {
     bool operator!=(const WiFiRadioState& other) const noexcept { return !(*this == other); }
 };
 
+/// <summary>Serializable IP addressing configuration for an interface.</summary>
 struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
     ESPRESSIO_SERIALIZABLE_TYPE(NetworkAddress)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -108,6 +118,7 @@ struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
     )
 };
 
+/// <summary>Serializable description of one network returned by Wi-Fi scanning.</summary>
 struct ScanResult final : Serializable::Serializable<ScanResult> {
     ESPRESSIO_SERIALIZABLE_TYPE(ScanResult)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -128,6 +139,7 @@ struct ScanResult final : Serializable::Serializable<ScanResult> {
     )
 };
 
+/// <summary>Resolved known-network candidate considered by automatic client selection.</summary>
 struct ClientNetworkCandidate {
     std::string SSID;
     MacAddress BSSID{};
@@ -137,6 +149,7 @@ struct ClientNetworkCandidate {
     std::size_t ProfileIndex = 0;
 };
 
+/// <summary>Current state and selected candidate metadata for automatic client-network selection.</summary>
 struct ClientNetworkSelectionRuntimeState {
     ClientNetworkSelectionState State = ClientNetworkSelectionState::Idle;
     std::string SelectedSSID;
@@ -145,6 +158,7 @@ struct ClientNetworkSelectionRuntimeState {
     std::size_t EligibleCandidateCount = 0;
 };
 
+/// <summary>Current client/station runtime state.</summary>
 struct ClientRuntimeState {
     ClientState State=ClientState::Disabled;
     std::string SSID;
@@ -156,6 +170,7 @@ struct ClientRuntimeState {
     ClientNetworkSelectionRuntimeState Selection{};
 };
 
+/// <summary>Current access-point runtime state.</summary>
 struct AccessPointRuntimeState {
     AccessPointState State=AccessPointState::Disabled;
     std::string SSID;
@@ -164,6 +179,7 @@ struct AccessPointRuntimeState {
     uint16_t ConnectedStations=0;
 };
 
+/// <summary>Current AP-until-client fallback runtime state.</summary>
 struct APUntilClientRuntimeState {
     APUntilClientState State = APUntilClientState::Inactive;
     bool FallbackAccessPointActive = false;
@@ -171,6 +187,7 @@ struct APUntilClientRuntimeState {
     uint64_t NextRetryMilliseconds = 0;
 };
 
+/// <summary>Aggregate application-level Wi-Fi runtime state and revision.</summary>
 struct WiFiRuntimeState {
     WiFiMode Mode=WiFiMode::Off;
     ClientRuntimeState Client{};
