@@ -5,6 +5,7 @@
 
 namespace ESPressio::Event {
 
+/// <summary>Serializable event describing an application-level Wi-Fi mode transition.</summary>
 class WiFiModeChangedEvent final : public SerializableEvent<WiFiModeChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiModeChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -16,6 +17,7 @@ public:
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("before", Before), ESPRESSIO_PROPERTY("after", After))
 };
 
+/// <summary>Serializable event describing a client/station state transition and resulting network state.</summary>
 class WiFiClientStateChangedEvent final : public SerializableEvent<WiFiClientStateChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientStateChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -33,6 +35,7 @@ public:
     )
 };
 
+/// <summary>Serializable event describing an access-point state transition.</summary>
 class WiFiAccessPointStateChangedEvent final : public SerializableEvent<WiFiAccessPointStateChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiAccessPointStateChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -50,6 +53,7 @@ public:
     )
 };
 
+/// <summary>Serializable event describing an AP-until-client fallback state transition.</summary>
 class WiFiAPUntilClientStateChangedEvent final : public SerializableEvent<WiFiAPUntilClientStateChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiAPUntilClientStateChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -73,6 +77,7 @@ public:
     )
 };
 
+/// <summary>Serializable event describing a Wi-Fi scan-state transition.</summary>
 class WiFiScanStateChangedEvent final : public SerializableEvent<WiFiScanStateChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiScanStateChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -84,6 +89,7 @@ public:
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("before", Before), ESPRESSIO_PROPERTY("after", After))
 };
 
+/// <summary>Serializable event containing the completed Wi-Fi scan result set.</summary>
 class WiFiScanCompletedEvent final : public SerializableEvent<WiFiScanCompletedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiScanCompletedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -94,6 +100,7 @@ public:
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("results", Results))
 };
 
+/// <summary>Serializable event identifying a station that connected to the local access point.</summary>
 class WiFiAccessPointStationConnectedEvent final : public SerializableEvent<WiFiAccessPointStationConnectedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiAccessPointStationConnectedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -104,6 +111,7 @@ public:
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("station", Station))
 };
 
+/// <summary>Serializable event identifying a station that disconnected from the local access point.</summary>
 class WiFiAccessPointStationDisconnectedEvent final : public SerializableEvent<WiFiAccessPointStationDisconnectedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiAccessPointStationDisconnectedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -114,6 +122,7 @@ public:
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("station", Station))
 };
 
+/// <summary>Serializable event reporting the network address acquired by the client interface.</summary>
 class WiFiClientIPAddressAcquiredEvent final : public SerializableEvent<WiFiClientIPAddressAcquiredEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientIPAddressAcquiredEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -124,6 +133,7 @@ public:
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("network", Network))
 };
 
+/// <summary>Serializable event reporting loss of the client interface IP address.</summary>
 class WiFiClientIPAddressLostEvent final : public SerializableEvent<WiFiClientIPAddressLostEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientIPAddressLostEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -131,6 +141,7 @@ public:
     ESPRESSIO_SERIALIZABLE_PROPERTIES()
 };
 
+/// <summary>Serializable event describing preferred-client-network selection state and candidate metadata.</summary>
 class WiFiClientNetworkSelectionChangedEvent final : public SerializableEvent<WiFiClientNetworkSelectionChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientNetworkSelectionChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -153,6 +164,7 @@ public:
     )
 };
 
+/// <summary>Serializable event describing the known client-network candidate selected for connection.</summary>
 class WiFiClientNetworkSelectedEvent final : public SerializableEvent<WiFiClientNetworkSelectedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientNetworkSelectedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -171,6 +183,7 @@ public:
     )
 };
 
+/// <summary>Serializable event reporting that no configured known client network is currently available.</summary>
 class WiFiClientNoKnownNetworkAvailableEvent final : public SerializableEvent<WiFiClientNoKnownNetworkAvailableEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientNoKnownNetworkAvailableEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
