@@ -15,25 +15,39 @@ public:
     virtual void OnWiFiRadioTransitionBeginning(
         const WiFiRadioState& before,
         WiFiRadioTransitionReason reason
-    ) {}
+    ) {
+        (void)before;
+        (void)reason;
+    }
 
     /// <summary>Called after a radio transition completes.</summary>
     virtual void OnWiFiRadioTransitionCompleted(
         const WiFiRadioState& before,
         const WiFiRadioState& after,
         WiFiRadioTransitionReason reason
-    ) {}
+    ) {
+        (void)before;
+        (void)after;
+        (void)reason;
+    }
 
     /// <summary>Called whenever the effective shared-radio state changes.</summary>
     virtual void OnWiFiRadioStateChanged(
         const WiFiRadioState& before,
         const WiFiRadioState& after
-    ) {}
+    ) {
+        (void)before;
+        (void)after;
+    }
 
     /// <summary>Called before a Wi-Fi scan begins using the shared radio.</summary>
-    virtual void OnWiFiRadioScanBeginning(const WiFiRadioState& before) {}
+    virtual void OnWiFiRadioScanBeginning(const WiFiRadioState& before) {
+        (void)before;
+    }
     /// <summary>Called after a Wi-Fi scan releases or reconfigures the shared radio.</summary>
-    virtual void OnWiFiRadioScanCompleted(const WiFiRadioState& after) {}
+    virtual void OnWiFiRadioScanCompleted(const WiFiRadioState& after) {
+        (void)after;
+    }
 };
 
 } // namespace ESPressio::WiFi
