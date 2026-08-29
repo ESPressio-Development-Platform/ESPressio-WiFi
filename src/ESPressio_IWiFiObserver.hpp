@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <ESPressio_IObserver.hpp>
 #include "ESPressio_WiFiTypes.hpp"
 
@@ -19,8 +21,8 @@ public:
     virtual void OnAPUntilClientStateChanged(const APUntilClientRuntimeState&, const APUntilClientRuntimeState&) {}
     /// <summary>Called when Wi-Fi scan state changes.</summary>
     virtual void OnScanStateChanged(ScanState, ScanState) {}
-    /// <summary>Called with the completed Wi-Fi scan result set in externally preferred storage.</summary>
-    virtual void OnScanCompleted(const WiFiVector<ScanResult>&) {}
+    /// <summary>Called with the completed Wi-Fi scan result set.</summary>
+    virtual void OnScanCompleted(const std::vector<ScanResult>&) {}
     /// <summary>Called when a station associates with the local access point.</summary>
     virtual void OnAccessPointStationConnected(const MacAddress&) {}
     /// <summary>Called when a station disconnects from the local access point.</summary>
