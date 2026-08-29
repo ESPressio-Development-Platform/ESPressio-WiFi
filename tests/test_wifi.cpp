@@ -56,7 +56,7 @@ public:
     bool deliverScan=false;
     int legacyConnects=0,scanStarts=0,apStarts=0,apStops=0;
     WiFiVector<ScanResult> nextScan;
-    std::vector<std::string> connectedProfiles;
+    WiFiVector<WiFiString> connectedProfiles;
     WiFiVector<WiFiPlatformEvent> pending;
 };
 
@@ -77,7 +77,7 @@ public:
     void OnClientNetworkSelected(const ClientNetworkCandidate& c) override { selected.push_back(c.SSID); selectedRSSI.push_back(c.RSSI); }
     void OnClientNoKnownNetworkAvailable() override { noKnown++; }
     int modes=0,clients=0,scanCompletions=0,scans=0,selectionChanges=0,noKnown=0,apUntilClientChanges=0;
-    std::vector<std::string> selected;
+    WiFiVector<WiFiString> selected;
     std::vector<int32_t> selectedRSSI;
     std::vector<APUntilClientState> apUntilClientStates;
 };
