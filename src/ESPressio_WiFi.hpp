@@ -6,7 +6,6 @@
 #include <memory>
 #include <mutex>
 #include <utility>
-#include <vector>
 
 #include <ESPressio_Memory.hpp>
 #include <ESPressio_ThreadSafeObservable.hpp>
@@ -42,20 +41,20 @@ public:
     virtual WiFiStatus StartAccessPoint() = 0;
     virtual WiFiStatus StopAccessPoint() = 0;
     virtual WiFiStatus StartScan() = 0;
-    virtual WiFiStatus Poll(WiFiRuntimeState&, std::vector<ScanResult>*, std::vector<WiFiPlatformEvent>*) = 0;
+    /// <summary>Polls platform state and optionally returns completed scan and platform-event batches in Wi-Fi policy-aware storage.</summary>
+    virtual WiFiStatus Poll(
+        WiFiRuntimeState&,
+        WiFiVector<ScanResult>*,
+        WiFiVector<WiFiPlatformEvent>*
+    ) = 0;
     virtual WiFiRadioState GetRadioState() const { return WiFiRadioState{}; }
 };
 
 class WiFiManager {
 private:
-    using ScanStorage = System::Memory::Vector<
-        ScanResult,
-        System::Memory::MemoryPolicy::ExternalPreferred
-    >;
-    using CandidateStorage = System::Memory::Vector<
-        ClientNetworkCandidate,
-        System::Memory::MemoryPolicy::ExternalPreferred
-    >;
+    using ScanStorage = WiFiVector<ScanResult>;
+    using CandidateStorage = WiFiVector<ClientNetworkCandidate>;
+    using EventStorage = WiFiVector<WiFiPlatformEvent>;
 
     class ManagerObservable final : public Observable::ThreadSafeObservable {
         template<typename F> void Notify(F&& callback) {
@@ -71,7 +70,7 @@ private:
         void AccessPoint(const AccessPointRuntimeState& before, const AccessPointRuntimeState& after) { Notify([&](IWiFiObserver* o){ o->OnAccessPointStateChanged(before, after); }); }
         void APUntilClient(const APUntilClientRuntimeState& before, const APUntilClientRuntimeState& after) { Notify([&](IWiFiObserver* o){ o->OnAPUntilClientStateChanged(before, after); }); }
         void ScanState(ScanState before, ScanState after) { Notify([&](IWiFiObserver* o){ o->OnScanStateChanged(before, after); }); }
-        void ScanComplete(const std::vector<ScanResult>& results) { Notify([&](IWiFiObserver* o){ o->OnScanCompleted(results); }); }
+        void ScanComplete(const WiFiVector<ScanResult>& results) { Notify([&](IWiFiObserver* o){ o->OnScanCompleted(results); }); }
         void APStationConnected(const MacAddress& mac) { Notify([&](IWiFiObserver* o){ o->OnAccessPointStationConnected(mac); }); }
         void APStationDisconnected(const MacAddress& mac) { Notify([&](IWiFiObserver* o){ o->OnAccessPointStationDisconnected(mac); }); }
         void IP(const NetworkAddress& network) { Notify([&](IWiFiObserver* o){ o->OnClientIPAddressAcquired(network); }); }
@@ -110,7 +109,7 @@ public:
     using AccessPointCallback = std::function<void(const AccessPointRuntimeState&, const AccessPointRuntimeState&)>;
     using APUntilClientCallback = std::function<void(const APUntilClientRuntimeState&, const APUntilClientRuntimeState&)>;
     using ScanStateCallback = std::function<void(ScanState, ScanState)>;
-    using ScanCallback = std::function<void(const std::vector<ScanResult>&)>;
+    using ScanCallback = std::function<void(const WiFiVector<ScanResult>&)>;
     using StationCallback = std::function<void(const MacAddress&)>;
     using IPAddressCallback = std::function<void(const NetworkAddress&)>;
     using IPLostCallback = std::function<void()>;
@@ -150,14 +149,16 @@ public:
 
     WiFiRadioState RadioState() const { return ReadRadioState(); }
 
-    std::vector<ScanResult> LastScanResults() const {
+    /// <summary>Returns the latest completed scan while preserving external-preferred backing storage.</summary>
+    WiFiVector<ScanResult> LastScanResults() const {
         std::lock_guard<std::mutex> lock(_mutex);
-        return std::vector<ScanResult>(_lastScanResults.begin(), _lastScanResults.end());
+        return _lastScanResults;
     }
 
-    std::vector<ClientNetworkCandidate> EligibleClientNetworks() const {
+    /// <summary>Returns the currently eligible known-network candidates in external-preferred storage.</summary>
+    WiFiVector<ClientNetworkCandidate> EligibleClientNetworks() const {
         std::lock_guard<std::mutex> lock(_mutex);
-        return std::vector<ClientNetworkCandidate>(_eligibleCandidates.begin(), _eligibleCandidates.end());
+        return _eligibleCandidates;
     }
 
     void SetWorkSignal(WorkSignal signal) {
@@ -363,8 +364,8 @@ public:
         std::lock_guard<std::recursive_mutex> transitionLock(_radioTransitionMutex);
         WiFiRuntimeState next;
         { std::lock_guard<std::mutex> lock(_mutex); next = _state; }
-        std::vector<ScanResult> scan;
-        std::vector<WiFiPlatformEvent> events;
+        ScanStorage scan;
+        EventStorage events;
         WiFiRadioState radioAfter;
         WiFiStatus status = WiFiStatus::PlatformError;
         {
@@ -509,7 +510,7 @@ private:
         }
     }
 
-    CandidateStorage BuildCandidates(const std::vector<ScanResult>& scan) const {
+    CandidateStorage BuildCandidates(const ScanStorage& scan) const {
         CandidateStorage candidates;
         std::lock_guard<std::mutex> lock(_mutex);
         candidates.reserve(_configuration.Client.Networks.size());
@@ -538,7 +539,7 @@ private:
         return candidates;
     }
 
-    void HandleCompletedScan(const std::vector<ScanResult>& scan) {
+    void HandleCompletedScan(const ScanStorage& scan) {
         bool shouldSelect = false;
         {
             std::lock_guard<std::mutex> lock(_mutex);

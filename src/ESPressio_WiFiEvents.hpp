@@ -24,7 +24,7 @@ class WiFiClientStateChangedEvent final : public SerializableEvent<WiFiClientSta
 public:
     WiFi::ClientState Before = WiFi::ClientState::Disabled;
     WiFi::ClientState After = WiFi::ClientState::Disabled;
-    std::string SSID;
+    WiFi::WiFiString SSID;
     WiFi::NetworkAddress Network{};
     WiFiClientStateChangedEvent() = default;
     WiFiClientStateChangedEvent(const WiFi::ClientRuntimeState& before, const WiFi::ClientRuntimeState& after)
@@ -42,7 +42,7 @@ class WiFiAccessPointStateChangedEvent final : public SerializableEvent<WiFiAcce
 public:
     WiFi::AccessPointState Before = WiFi::AccessPointState::Disabled;
     WiFi::AccessPointState After = WiFi::AccessPointState::Disabled;
-    std::string SSID;
+    WiFi::WiFiString SSID;
     uint16_t ConnectedStations = 0;
     WiFiAccessPointStateChangedEvent() = default;
     WiFiAccessPointStateChangedEvent(const WiFi::AccessPointRuntimeState& before, const WiFi::AccessPointRuntimeState& after)
@@ -89,14 +89,14 @@ public:
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("before", Before), ESPRESSIO_PROPERTY("after", After))
 };
 
-/// <summary>Serializable event containing the completed Wi-Fi scan result set.</summary>
+/// <summary>Serializable event containing the completed Wi-Fi scan result set in externally preferred storage.</summary>
 class WiFiScanCompletedEvent final : public SerializableEvent<WiFiScanCompletedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiScanCompletedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
 public:
-    std::vector<WiFi::ScanResult> Results;
+    WiFi::WiFiVector<WiFi::ScanResult> Results;
     WiFiScanCompletedEvent() = default;
-    explicit WiFiScanCompletedEvent(const std::vector<WiFi::ScanResult>& results) : Results(results) {}
+    explicit WiFiScanCompletedEvent(const WiFi::WiFiVector<WiFi::ScanResult>& results) : Results(results) {}
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("results", Results))
 };
 
@@ -148,7 +148,7 @@ class WiFiClientNetworkSelectionChangedEvent final : public SerializableEvent<Wi
 public:
     WiFi::ClientNetworkSelectionState Before = WiFi::ClientNetworkSelectionState::Idle;
     WiFi::ClientNetworkSelectionState After = WiFi::ClientNetworkSelectionState::Idle;
-    std::string SelectedSSID;
+    WiFi::WiFiString SelectedSSID;
     uint16_t SelectedPriority = 0;
     uint32_t EligibleCandidateCount = 0;
     WiFiClientNetworkSelectionChangedEvent() = default;
@@ -169,7 +169,7 @@ class WiFiClientNetworkSelectedEvent final : public SerializableEvent<WiFiClient
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientNetworkSelectedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
 public:
-    std::string SSID;
+    WiFi::WiFiString SSID;
     WiFi::MacAddress BSSID{};
     uint16_t Priority = 0;
     int32_t RSSI = 0;

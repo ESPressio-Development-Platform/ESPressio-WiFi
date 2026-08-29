@@ -40,7 +40,7 @@ public:
     WiFiStatus StartAccessPoint() override { state.AccessPoint.State=AccessPointState::Active; state.Revision++; apStarts++; radioState.AccessPointInterfaceActive=true; radioState.Channel=configured.AccessPoint.Channel; radioState.Mode=radioState.StationInterfaceActive?WiFiRadioMode::AccessPointStation:WiFiRadioMode::AccessPoint; return WiFiStatus::Success; }
     WiFiStatus StopAccessPoint() override { state.AccessPoint.State=AccessPointState::Disabled; state.Revision++; apStops++; radioState.AccessPointInterfaceActive=false; radioState.Mode=radioState.StationInterfaceActive?WiFiRadioMode::Station:WiFiRadioMode::Off; return WiFiStatus::Success; }
     WiFiStatus StartScan() override { state.Scan=ScanState::Scanning; state.Revision++; scanStarts++; radioState.Scanning=true; return WiFiStatus::Success; }
-    WiFiStatus Poll(WiFiRuntimeState& output,std::vector<ScanResult>* scans,std::vector<WiFiPlatformEvent>* events) override {
+    WiFiStatus Poll(WiFiRuntimeState& output,WiFiVector<ScanResult>* scans,WiFiVector<WiFiPlatformEvent>* events) override {
         output=state;
         if (state.Client.State==ClientState::Connected) radioState.StationConnected=true;
         else if (state.Client.State==ClientState::Disconnected || state.Client.State==ClientState::Failed) radioState.StationConnected=false;
@@ -55,9 +55,9 @@ public:
     WiFiRadioState radioState{};
     bool deliverScan=false;
     int legacyConnects=0,scanStarts=0,apStarts=0,apStops=0;
-    std::vector<ScanResult> nextScan;
+    WiFiVector<ScanResult> nextScan;
     std::vector<std::string> connectedProfiles;
-    std::vector<WiFiPlatformEvent> pending;
+    WiFiVector<WiFiPlatformEvent> pending;
 };
 
 class FakeStore final : public IWiFiConfigurationStore {
@@ -72,7 +72,7 @@ public:
     void OnWiFiModeChanged(WiFiMode,WiFiMode) override { modes++; }
     void OnClientStateChanged(const ClientRuntimeState&,const ClientRuntimeState&) override { clients++; }
     void OnAPUntilClientStateChanged(const APUntilClientRuntimeState&,const APUntilClientRuntimeState& after) override { apUntilClientChanges++; apUntilClientStates.push_back(after.State); }
-    void OnScanCompleted(const std::vector<ScanResult>& r) override { scanCompletions++; scans += static_cast<int>(r.size()); }
+    void OnScanCompleted(const WiFiVector<ScanResult>& r) override { scanCompletions++; scans += static_cast<int>(r.size()); }
     void OnClientNetworkSelectionChanged(const ClientNetworkSelectionRuntimeState&,const ClientNetworkSelectionRuntimeState&) override { selectionChanges++; }
     void OnClientNetworkSelected(const ClientNetworkCandidate& c) override { selected.push_back(c.SSID); selectedRSSI.push_back(c.RSSI); }
     void OnClientNoKnownNetworkAvailable() override { noKnown++; }

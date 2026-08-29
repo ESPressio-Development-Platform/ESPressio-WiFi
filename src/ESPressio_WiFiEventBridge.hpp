@@ -47,7 +47,7 @@ public:
         (new WiFiScanStateChangedEvent(before, after))->Queue();
     }
     /// <inheritdoc/>
-    void OnScanCompleted(const std::vector<WiFi::ScanResult>& results) override {
+    void OnScanCompleted(const WiFi::WiFiVector<WiFi::ScanResult>& results) override {
         (new WiFiScanCompletedEvent(results))->Queue();
     }
     /// <inheritdoc/>
