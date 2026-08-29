@@ -1,8 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
-#include <vector>
 
 #include <ESPressio_Serializable.hpp>
 #include "ESPressio_WiFiTypes.hpp"
@@ -15,10 +13,10 @@ struct ClientNetworkProfile final : Serializable::Serializable<ClientNetworkProf
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
     ~ClientNetworkProfile() = default;
 
-    /// <summary>Network SSID.</summary>
-    std::string SSID;
-    /// <summary>Network password; serialized as a sensitive property.</summary>
-    std::string Password;
+    /// <summary>Network SSID retained in externally preferred storage.</summary>
+    WiFiString SSID;
+    /// <summary>Network password retained in externally preferred storage; serialized as a sensitive property.</summary>
+    WiFiString Password;
     /// <summary>Selection priority; lower/higher ordering is interpreted by the Wi-Fi selection implementation.</summary>
     uint16_t Priority = 100;
     /// <summary>Whether this profile is eligible for automatic selection.</summary>
@@ -62,7 +60,7 @@ struct ClientNetworkSelectionConfiguration final
     )
 };
 
-/// <summary>Persistable station/client configuration including legacy direct credentials and preferred-network profiles.</summary>
+/// <summary>Persistable station/client configuration including direct credentials and preferred-network profiles.</summary>
 struct ClientConfiguration final : Serializable::Serializable<ClientConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(ClientConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(2)
@@ -70,16 +68,16 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
 
     /// <summary>Whether client/station functionality is enabled.</summary>
     bool Enabled = false;
-    /// <summary>Legacy/direct client SSID.</summary>
-    std::string SSID;
-    /// <summary>Legacy/direct client password; serialized as a sensitive property.</summary>
-    std::string Password;
+    /// <summary>Direct client SSID retained in externally preferred storage.</summary>
+    WiFiString SSID;
+    /// <summary>Direct client password retained in externally preferred storage; serialized as a sensitive property.</summary>
+    WiFiString Password;
     /// <summary>Address assignment mode for the direct client configuration.</summary>
     AddressMode Addressing = AddressMode::DHCP;
     /// <summary>Static network values used when static addressing is selected.</summary>
     NetworkAddress StaticNetwork{};
-    /// <summary>Known network profiles available to the automatic selector.</summary>
-    std::vector<ClientNetworkProfile> Networks;
+    /// <summary>Known network profiles available to the automatic selector, with externally preferred backing storage.</summary>
+    WiFiVector<ClientNetworkProfile> Networks;
     /// <summary>Automatic known-network selection behavior.</summary>
     ClientNetworkSelectionConfiguration Selection{};
 
@@ -129,10 +127,10 @@ struct AccessPointConfiguration final : Serializable::Serializable<AccessPointCo
 
     /// <summary>Whether access-point functionality is enabled.</summary>
     bool Enabled = true;
-    /// <summary>SSID advertised by the access point.</summary>
-    std::string SSID;
-    /// <summary>Access-point password; serialized as a sensitive property.</summary>
-    std::string Password;
+    /// <summary>SSID advertised by the access point and retained in externally preferred storage.</summary>
+    WiFiString SSID;
+    /// <summary>Access-point password retained in externally preferred storage; serialized as a sensitive property.</summary>
+    WiFiString Password;
     /// <summary>Wi-Fi channel used by the access point.</summary>
     uint8_t Channel = 1;
     /// <summary>Whether the SSID is hidden.</summary>
@@ -218,8 +216,8 @@ struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
 
     /// <summary>Requested Wi-Fi operating mode, including explicit Off mode where supported.</summary>
     WiFiMode Mode = WiFiMode::AccessPoint;
-    /// <summary>Hostname advertised/used by the Wi-Fi stack.</summary>
-    std::string Hostname = "espressio";
+    /// <summary>Hostname advertised/used by the Wi-Fi stack and retained in externally preferred storage.</summary>
+    WiFiString Hostname = "espressio";
     /// <summary>Client/station configuration.</summary>
     ClientConfiguration Client{};
     /// <summary>Access-point configuration.</summary>
