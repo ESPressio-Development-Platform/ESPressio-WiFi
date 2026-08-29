@@ -3,11 +3,23 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <string>
-#include <vector>
+#include <cstdio>
+
+#include <ESPressio_Memory.hpp>
 #include <ESPressio_Serializable.hpp>
 
 namespace ESPressio::WiFi {
+
+/// <summary>Memory policy used for Wi-Fi dynamic state that does not require internal or DMA-capable RAM.</summary>
+inline constexpr auto WiFiMemoryPolicy =
+    System::Memory::MemoryPolicy::ExternalPreferred;
+
+/// <summary>Wi-Fi text whose dynamic storage prefers external memory.</summary>
+using WiFiString = System::Memory::String<WiFiMemoryPolicy>;
+
+/// <summary>Wi-Fi dynamic collection whose backing storage prefers external memory.</summary>
+template<typename T>
+using WiFiVector = System::Memory::Vector<T, WiFiMemoryPolicy>;
 
 /// <summary>Application-level Wi-Fi operating mode.</summary>
 /// <remarks>APUntilClient prefers STA connectivity and exposes an AP only as fallback. Off is the canonical explicit radio-off mode; Disabled is retained for compatibility and has the same platform effect.</remarks>
@@ -59,8 +71,22 @@ struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("octets", Octets))
     bool operator==(const IPv4Address& other) const noexcept { return Octets==other.Octets; }
     bool operator!=(const IPv4Address& other) const noexcept { return !(*this==other); }
-    /// <summary>Returns dotted-decimal text for the address.</summary>
-    std::string ToString() const { return std::to_string(Octets[0])+"."+std::to_string(Octets[1])+"."+std::to_string(Octets[2])+"."+std::to_string(Octets[3]); }
+    /// <summary>Returns dotted-decimal text in externally preferred storage.</summary>
+    WiFiString ToString() const {
+        char buffer[16]{};
+        const int written = std::snprintf(
+            buffer,
+            sizeof(buffer),
+            "%u.%u.%u.%u",
+            static_cast<unsigned>(Octets[0]),
+            static_cast<unsigned>(Octets[1]),
+            static_cast<unsigned>(Octets[2]),
+            static_cast<unsigned>(Octets[3])
+        );
+        return written > 0
+            ? WiFiString(buffer, static_cast<std::size_t>(written))
+            : WiFiString{};
+    }
 };
 
 /// <summary>Serializable six-octet MAC address value.</summary>
@@ -123,7 +149,7 @@ struct ScanResult final : Serializable::Serializable<ScanResult> {
     ESPRESSIO_SERIALIZABLE_TYPE(ScanResult)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
     ~ScanResult() = default;
-    std::string SSID;
+    WiFiString SSID;
     MacAddress BSSID{};
     int32_t RSSI=0;
     uint8_t Channel=0;
@@ -141,7 +167,7 @@ struct ScanResult final : Serializable::Serializable<ScanResult> {
 
 /// <summary>Resolved known-network candidate considered by automatic client selection.</summary>
 struct ClientNetworkCandidate {
-    std::string SSID;
+    WiFiString SSID;
     MacAddress BSSID{};
     uint16_t Priority = 0;
     int32_t RSSI = 0;
@@ -152,7 +178,7 @@ struct ClientNetworkCandidate {
 /// <summary>Current state and selected candidate metadata for automatic client-network selection.</summary>
 struct ClientNetworkSelectionRuntimeState {
     ClientNetworkSelectionState State = ClientNetworkSelectionState::Idle;
-    std::string SelectedSSID;
+    WiFiString SelectedSSID;
     uint16_t SelectedPriority = 0;
     std::size_t SelectedProfileIndex = 0;
     std::size_t EligibleCandidateCount = 0;
@@ -161,7 +187,7 @@ struct ClientNetworkSelectionRuntimeState {
 /// <summary>Current client/station runtime state.</summary>
 struct ClientRuntimeState {
     ClientState State=ClientState::Disabled;
-    std::string SSID;
+    WiFiString SSID;
     MacAddress BSSID{};
     int32_t RSSI=0;
     uint8_t Channel=0;
@@ -173,7 +199,7 @@ struct ClientRuntimeState {
 /// <summary>Current access-point runtime state.</summary>
 struct AccessPointRuntimeState {
     AccessPointState State=AccessPointState::Disabled;
-    std::string SSID;
+    WiFiString SSID;
     uint8_t Channel=0;
     NetworkAddress Network{};
     uint16_t ConnectedStations=0;
@@ -271,5 +297,6 @@ ESPRESSIO_ENUM_MAPPING(
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::Inactive, "inactive"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::SeekingClient, "seeking-client"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::FallbackAccessPoint, "fallback-access-point"),
+    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::ClientConnected, "client-connected"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::ClientConnected, "client-connected")
 )
