@@ -297,6 +297,5 @@ ESPRESSIO_ENUM_MAPPING(
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::Inactive, "inactive"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::SeekingClient, "seeking-client"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::FallbackAccessPoint, "fallback-access-point"),
-    ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::ClientConnected, "client-connected"),
     ESPRESSIO_ENUM_VALUE(ESPressio::WiFi::APUntilClientState::ClientConnected, "client-connected")
 )
