@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string_view>
 #include <utility>
 
 #include <ESPressio_Memory.hpp>
@@ -50,11 +51,15 @@ public:
     virtual WiFiRadioState GetRadioState() const { return WiFiRadioState{}; }
 };
 
+/// <summary>Coordinates platform Wi-Fi configuration, runtime state, selection, callbacks, and observers.</summary>
+/// <remarks>Construction is allocation-free for observer infrastructure. Manager and radio observables are materialized only when a corresponding observer is registered, allowing globally constructed managers to avoid pre-provider DRAM allocations. Explicit callbacks already use external-preferred shared storage.</remarks>
 class WiFiManager {
 private:
     using ScanStorage = WiFiVector<ScanResult>;
     using CandidateStorage = WiFiVector<ClientNetworkCandidate>;
     using EventStorage = WiFiVector<WiFiPlatformEvent>;
+    static constexpr auto ExternalPreferred =
+        System::Memory::MemoryPolicy::ExternalPreferred;
 
     class ManagerObservable final : public Observable::ThreadSafeObservable {
         template<typename F> void Notify(F&& callback) {
@@ -118,15 +123,14 @@ public:
     using SimpleCallback = std::function<void()>;
     using WorkSignal = std::function<void()>;
 
+    /// <summary>Creates a Wi-Fi manager without allocating optional observer infrastructure.</summary>
     explicit WiFiManager(IWiFiPlatform& platform, Clock clock = {})
         : _platform(platform),
           _clock(clock ? std::move(clock) : Clock([]() -> uint64_t {
               return static_cast<uint64_t>(
                   std::chrono::duration_cast<std::chrono::milliseconds>(
                       std::chrono::steady_clock::now().time_since_epoch()).count());
-          })),
-          _observable(System::Memory::MakeShared<ManagerObservable, System::Memory::MemoryPolicy::ExternalPreferred>()),
-          _radioObservable(System::Memory::MakeShared<RadioObservable, System::Memory::MemoryPolicy::ExternalPreferred>()) {}
+          })) {}
 
     WiFiConfiguration Configuration() const {
         std::lock_guard<std::mutex> lock(_mutex);
@@ -149,16 +153,32 @@ public:
 
     WiFiRadioState RadioState() const { return ReadRadioState(); }
 
-    /// <summary>Returns the latest completed scan while preserving external-preferred backing storage.</summary>
+    /// <summary>Returns an owning copy of the latest completed scan while preserving external-preferred backing storage.</summary>
     WiFiVector<ScanResult> LastScanResults() const {
         std::lock_guard<std::mutex> lock(_mutex);
         return _lastScanResults;
     }
 
-    /// <summary>Returns the currently eligible known-network candidates in external-preferred storage.</summary>
+    /// <summary>Provides zero-copy guarded access to the latest completed scan results.</summary>
+    /// <remarks>The callback executes while the manager mutex is held and therefore must not call methods that attempt to reacquire the same mutex.</remarks>
+    template<typename Callback>
+    decltype(auto) WithLastScanResults(Callback&& callback) const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return std::forward<Callback>(callback)(_lastScanResults);
+    }
+
+    /// <summary>Returns an owning copy of the currently eligible known-network candidates in external-preferred storage.</summary>
     WiFiVector<ClientNetworkCandidate> EligibleClientNetworks() const {
         std::lock_guard<std::mutex> lock(_mutex);
         return _eligibleCandidates;
+    }
+
+    /// <summary>Provides zero-copy guarded access to the currently eligible known-network candidates.</summary>
+    /// <remarks>The callback executes while the manager mutex is held and therefore must not call methods that attempt to reacquire the same mutex.</remarks>
+    template<typename Callback>
+    decltype(auto) WithEligibleClientNetworks(Callback&& callback) const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return std::forward<Callback>(callback)(_eligibleCandidates);
     }
 
     void SetWorkSignal(WorkSignal signal) {
@@ -199,14 +219,26 @@ public:
         return result;
     }
 
+    /// <summary>Registers a manager-state observer, materializing its external-preferred observable on demand.</summary>
     Observable::ObserverHandlePtr RegisterObserver(IWiFiObserver* observer) {
-        return _observable->template RegisterObserverAs<IWiFiObserver>(observer);
+        auto observable = EnsureManagerObservable();
+        return observable
+            ? observable->template RegisterObserverAs<IWiFiObserver>(observer)
+            : Observable::ObserverHandlePtr{};
     }
-    void UnregisterObserver(IWiFiObserver* observer) { _observable->UnregisterObserver(observer); }
+    void UnregisterObserver(IWiFiObserver* observer) {
+        if (auto observable = ManagerObservableSnapshot()) observable->UnregisterObserver(observer);
+    }
+    /// <summary>Registers a radio-lifecycle observer, materializing its external-preferred observable on demand.</summary>
     Observable::ObserverHandlePtr RegisterRadioObserver(IWiFiRadioObserver* observer) {
-        return _radioObservable->template RegisterObserverAs<IWiFiRadioObserver>(observer);
+        auto observable = EnsureRadioObservable();
+        return observable
+            ? observable->template RegisterObserverAs<IWiFiRadioObserver>(observer)
+            : Observable::ObserverHandlePtr{};
     }
-    void UnregisterRadioObserver(IWiFiRadioObserver* observer) { _radioObservable->UnregisterObserver(observer); }
+    void UnregisterRadioObserver(IWiFiRadioObserver* observer) {
+        if (auto observable = RadioObservableSnapshot()) observable->UnregisterObserver(observer);
+    }
 
     WiFiStatus Configure(WiFiConfiguration configuration) {
         std::lock_guard<std::recursive_mutex> transitionLock(_radioTransitionMutex);
@@ -269,7 +301,7 @@ public:
     WiFiStatus Scan() {
         std::lock_guard<std::recursive_mutex> transitionLock(_radioTransitionMutex);
         const auto before = ReadRadioState();
-        _radioObservable->ScanBeginning(before);
+        if (auto observable = RadioObservableSnapshot()) observable->ScanBeginning(before);
         const auto r = ExecuteRadioTransition(WiFiRadioTransitionReason::Scan, [&](){ return _platform.StartScan(); });
         bool selectionScan = false;
         if (r == WiFiStatus::Success) {
@@ -277,8 +309,8 @@ public:
             selectionScan = UsesClient(_configuration.Mode) && _configuration.Client.Enabled &&
                 _configuration.Client.Selection.AutomaticSelection && !_configuration.Client.Networks.empty() &&
                 _state.Client.State != ClientState::Connected;
-        } else {
-            _radioObservable->ScanCompleted(ReadRadioState());
+        } else if (auto observable = RadioObservableSnapshot()) {
+            observable->ScanCompleted(ReadRadioState());
         }
         if (selectionScan) SetSelectionState(ClientNetworkSelectionState::Scanning);
         SignalWork();
@@ -322,7 +354,7 @@ public:
         return true;
     }
 
-    bool RemoveClientNetwork(const std::string& ssid) {
+    bool RemoveClientNetwork(std::string_view ssid) {
         bool removed = false;
         bool immediateFallback = false;
         {
@@ -330,7 +362,7 @@ public:
             auto& networks = _configuration.Client.Networks;
             const auto old = networks.size();
             networks.erase(std::remove_if(networks.begin(), networks.end(),
-                [&](const ClientNetworkProfile& p){ return p.SSID == ssid; }), networks.end());
+                [&](const ClientNetworkProfile& p){ return std::string_view(p.SSID.data(), p.SSID.size()) == ssid; }), networks.end());
             removed = networks.size() != old;
             immediateFallback = removed && _configuration.Mode == WiFiMode::APUntilClient && networks.empty();
         }
@@ -339,9 +371,18 @@ public:
         return removed;
     }
 
-    bool SetClientNetworkPriority(const std::string& ssid, uint16_t priority) {
+    bool SetClientNetworkPriority(std::string_view ssid, uint16_t priority) {
         bool changed = false;
-        { std::lock_guard<std::mutex> lock(_mutex); for (auto& p : _configuration.Client.Networks) if (p.SSID == ssid) { p.Priority = priority; changed = true; break; } }
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            for (auto& p : _configuration.Client.Networks) {
+                if (std::string_view(p.SSID.data(), p.SSID.size()) == ssid) {
+                    p.Priority = priority;
+                    changed = true;
+                    break;
+                }
+            }
+        }
         if (changed) SignalWork();
         return changed;
     }
@@ -388,17 +429,19 @@ public:
             scanCompleted = before.Scan != ScanState::Complete && next.Scan == ScanState::Complete;
             _state = next;
             if (scanCompleted) {
-                _lastScanResults.clear();
-                _lastScanResults.reserve(scan.size());
-                _lastScanResults.insert(_lastScanResults.end(), scan.begin(), scan.end());
+                // Keep an owning cache because user callbacks may synchronously
+                // query LastScanResults() while the transient poll batch is
+                // still being dispatched. The copy is PSRAM-backed and is a
+                // deliberate re-entrancy snapshot rather than accidental DRAM duplication.
+                _lastScanResults = scan;
             }
         }
         NotifyStateTransitions(before, next);
         if (scanCompleted) {
             auto cb = SnapshotCallback(_scanCallback);
             if (cb) (*cb)(scan);
-            _observable->ScanComplete(scan);
-            _radioObservable->ScanCompleted(radioAfter);
+            if (auto observable = ManagerObservableSnapshot()) observable->ScanComplete(scan);
+            if (auto observable = RadioObservableSnapshot()) observable->ScanCompleted(radioAfter);
             HandleCompletedScan(scan);
         }
         for (const auto& event : events) NotifyPlatformEvent(event);
@@ -416,10 +459,7 @@ private:
     template<typename TCallback>
     static CallbackRegistration<TCallback> MakeCallbackRegistration(TCallback callback) {
         if (!callback) return {};
-        return System::Memory::MakeShared<
-            TCallback,
-            System::Memory::MemoryPolicy::ExternalPreferred
-        >(std::move(callback));
+        return System::Memory::MakeShared<TCallback, ExternalPreferred>(std::move(callback));
     }
 
     template<typename TCallback>
@@ -435,6 +475,46 @@ private:
     ) const {
         std::lock_guard<std::mutex> lock(_callbackMutex);
         return callback;
+    }
+
+    std::shared_ptr<ManagerObservable> EnsureManagerObservable() {
+        std::lock_guard<std::mutex> lock(_observerMutex);
+        if (!_observable) {
+            try {
+                _observable = System::Memory::MakeShared<
+                    ManagerObservable,
+                    ExternalPreferred
+                >();
+            } catch (...) {
+                return {};
+            }
+        }
+        return _observable;
+    }
+
+    std::shared_ptr<RadioObservable> EnsureRadioObservable() {
+        std::lock_guard<std::mutex> lock(_observerMutex);
+        if (!_radioObservable) {
+            try {
+                _radioObservable = System::Memory::MakeShared<
+                    RadioObservable,
+                    ExternalPreferred
+                >();
+            } catch (...) {
+                return {};
+            }
+        }
+        return _radioObservable;
+    }
+
+    std::shared_ptr<ManagerObservable> ManagerObservableSnapshot() const {
+        std::lock_guard<std::mutex> lock(_observerMutex);
+        return _observable;
+    }
+
+    std::shared_ptr<RadioObservable> RadioObservableSnapshot() const {
+        std::lock_guard<std::mutex> lock(_observerMutex);
+        return _radioObservable;
     }
 
     static bool UsesClient(WiFiMode mode) {
@@ -463,14 +543,16 @@ private:
             _lastRadioState = after;
             _haveRadioState = true;
         }
-        if (changed) _radioObservable->StateChanged(before, after);
+        if (changed) {
+            if (auto observable = RadioObservableSnapshot()) observable->StateChanged(before, after);
+        }
     }
 
     template<typename F>
     WiFiStatus ExecuteRadioTransition(WiFiRadioTransitionReason reason, F&& op) {
         std::lock_guard<std::recursive_mutex> transitionLock(_radioTransitionMutex);
         const WiFiRadioState before = ReadRadioState();
-        _radioObservable->TransitionBeginning(before, reason);
+        if (auto observable = RadioObservableSnapshot()) observable->TransitionBeginning(before, reason);
         WiFiStatus status = WiFiStatus::PlatformError;
         WiFiRadioState after;
         {
@@ -478,7 +560,7 @@ private:
             status = op();
             after = _platform.GetRadioState();
         }
-        _radioObservable->TransitionCompleted(before, after, reason);
+        if (auto observable = RadioObservableSnapshot()) observable->TransitionCompleted(before, after, reason);
         PublishRadioState(after);
         return status;
     }
@@ -488,7 +570,7 @@ private:
         { std::lock_guard<std::mutex> lock(_mutex); before = _selectionState; _selectionState.State = state; after = _selectionState; }
         if (before.State != after.State) {
             auto cb = SnapshotCallback(_selectionCallback); if (cb) (*cb)(before, after);
-            _observable->Selection(before, after);
+            if (auto observable = ManagerObservableSnapshot()) observable->Selection(before, after);
         }
     }
 
@@ -506,7 +588,7 @@ private:
         if (before.State != after.State || before.FallbackAccessPointActive != after.FallbackAccessPointActive ||
             before.FallbackDeadlineMilliseconds != after.FallbackDeadlineMilliseconds || before.NextRetryMilliseconds != after.NextRetryMilliseconds) {
             auto cb = SnapshotCallback(_apUntilClientCallback); if (cb) (*cb)(before, after);
-            _observable->APUntilClient(before, after);
+            if (auto observable = ManagerObservableSnapshot()) observable->APUntilClient(before, after);
         }
     }
 
@@ -564,7 +646,7 @@ private:
         if (noCandidates) {
             SetSelectionState(ClientNetworkSelectionState::NoKnownNetworkAvailable);
             auto cb = SnapshotCallback(_noKnownNetworkCallback); if (cb) (*cb)();
-            _observable->NoKnownNetwork();
+            if (auto observable = ManagerObservableSnapshot()) observable->NoKnownNetwork();
             return;
         }
         SetSelectionState(ClientNetworkSelectionState::Selecting);
@@ -590,7 +672,7 @@ private:
         }
         if (!available) { SetSelectionState(ClientNetworkSelectionState::Exhausted); return WiFiStatus::InvalidConfiguration; }
         auto cb = SnapshotCallback(_selectedCallback); if (cb) (*cb)(candidate);
-        _observable->Selected(candidate);
+        if (auto observable = ManagerObservableSnapshot()) observable->Selected(candidate);
         SetSelectionState(ClientNetworkSelectionState::Connecting);
         const auto result = ExecuteRadioTransition(
             WiFiRadioTransitionReason::ClientConnect,
@@ -704,18 +786,48 @@ private:
     }
 
     void NotifyStateTransitions(const WiFiRuntimeState& before, const WiFiRuntimeState& next) {
-        if (before.Mode != next.Mode) { auto cb = SnapshotCallback(_modeCallback); if (cb) (*cb)(before.Mode, next.Mode); _observable->Mode(before.Mode, next.Mode); }
-        if (before.Client.State != next.Client.State || before.Client.Network.Address != next.Client.Network.Address) { auto cb = SnapshotCallback(_clientCallback); if (cb) (*cb)(before.Client, next.Client); _observable->Client(before.Client, next.Client); }
-        if (before.AccessPoint.State != next.AccessPoint.State || before.AccessPoint.ConnectedStations != next.AccessPoint.ConnectedStations) { auto cb = SnapshotCallback(_apCallback); if (cb) (*cb)(before.AccessPoint, next.AccessPoint); _observable->AccessPoint(before.AccessPoint, next.AccessPoint); }
-        if (before.Scan != next.Scan) { auto cb = SnapshotCallback(_scanStateCallback); if (cb) (*cb)(before.Scan, next.Scan); _observable->ScanState(before.Scan, next.Scan); }
+        auto observable = ManagerObservableSnapshot();
+        if (before.Mode != next.Mode) {
+            auto cb = SnapshotCallback(_modeCallback); if (cb) (*cb)(before.Mode, next.Mode);
+            if (observable) observable->Mode(before.Mode, next.Mode);
+        }
+        if (before.Client.State != next.Client.State || before.Client.Network.Address != next.Client.Network.Address) {
+            auto cb = SnapshotCallback(_clientCallback); if (cb) (*cb)(before.Client, next.Client);
+            if (observable) observable->Client(before.Client, next.Client);
+        }
+        if (before.AccessPoint.State != next.AccessPoint.State || before.AccessPoint.ConnectedStations != next.AccessPoint.ConnectedStations) {
+            auto cb = SnapshotCallback(_apCallback); if (cb) (*cb)(before.AccessPoint, next.AccessPoint);
+            if (observable) observable->AccessPoint(before.AccessPoint, next.AccessPoint);
+        }
+        if (before.Scan != next.Scan) {
+            auto cb = SnapshotCallback(_scanStateCallback); if (cb) (*cb)(before.Scan, next.Scan);
+            if (observable) observable->ScanState(before.Scan, next.Scan);
+        }
     }
 
     void NotifyPlatformEvent(const WiFiPlatformEvent& event) {
+        auto observable = ManagerObservableSnapshot();
         switch (event.Kind) {
-            case WiFiPlatformEventKind::AccessPointStationConnected: { auto cb = SnapshotCallback(_stationConnected); if (cb) (*cb)(event.Station); _observable->APStationConnected(event.Station); break; }
-            case WiFiPlatformEventKind::AccessPointStationDisconnected: { auto cb = SnapshotCallback(_stationDisconnected); if (cb) (*cb)(event.Station); _observable->APStationDisconnected(event.Station); break; }
-            case WiFiPlatformEventKind::ClientIPAddressAcquired: { auto cb = SnapshotCallback(_ipAcquired); if (cb) (*cb)(event.Network); _observable->IP(event.Network); break; }
-            case WiFiPlatformEventKind::ClientIPAddressLost: { auto cb = SnapshotCallback(_ipLost); if (cb) (*cb)(); _observable->IPLost(); break; }
+            case WiFiPlatformEventKind::AccessPointStationConnected: {
+                auto cb = SnapshotCallback(_stationConnected); if (cb) (*cb)(event.Station);
+                if (observable) observable->APStationConnected(event.Station);
+                break;
+            }
+            case WiFiPlatformEventKind::AccessPointStationDisconnected: {
+                auto cb = SnapshotCallback(_stationDisconnected); if (cb) (*cb)(event.Station);
+                if (observable) observable->APStationDisconnected(event.Station);
+                break;
+            }
+            case WiFiPlatformEventKind::ClientIPAddressAcquired: {
+                auto cb = SnapshotCallback(_ipAcquired); if (cb) (*cb)(event.Network);
+                if (observable) observable->IP(event.Network);
+                break;
+            }
+            case WiFiPlatformEventKind::ClientIPAddressLost: {
+                auto cb = SnapshotCallback(_ipLost); if (cb) (*cb)();
+                if (observable) observable->IPLost();
+                break;
+            }
         }
     }
 
@@ -723,6 +835,7 @@ private:
     Clock _clock;
     mutable std::mutex _mutex;
     mutable std::mutex _callbackMutex;
+    mutable std::mutex _observerMutex;
     mutable std::mutex _platformMutex;
     mutable std::recursive_mutex _radioTransitionMutex;
     mutable std::mutex _radioStateMutex;
