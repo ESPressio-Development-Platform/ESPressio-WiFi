@@ -52,7 +52,7 @@ public:
 };
 
 /// <summary>Coordinates platform Wi-Fi configuration, runtime state, selection, callbacks, and observers.</summary>
-/// <remarks>Construction is allocation-free for observer infrastructure. Manager and radio observables are materialized only when a corresponding observer is registered, allowing globally constructed managers to avoid pre-provider DRAM allocations. Explicit callbacks already use external-preferred shared storage.</remarks>
+/// <remarks>Construction is allocation-free for observer infrastructure. Manager and radio observables are materialized only when a corresponding observer is registered, allowing globally constructed managers to avoid pre-provider DRAM allocations. Public state/cache accessors return owning snapshots so no consumer callback executes while the manager state mutex is held.</remarks>
 class WiFiManager {
 private:
     using ScanStorage = WiFiVector<ScanResult>;
@@ -132,15 +132,10 @@ public:
                       std::chrono::steady_clock::now().time_since_epoch()).count());
           })) {}
 
+    /// <summary>Returns an independent owning snapshot of the current Wi-Fi configuration.</summary>
     WiFiConfiguration Configuration() const {
         std::lock_guard<std::mutex> lock(_mutex);
         return _configuration;
-    }
-
-    template<typename Callback>
-    decltype(auto) WithConfiguration(Callback&& callback) const {
-        std::lock_guard<std::mutex> lock(_mutex);
-        return std::forward<Callback>(callback)(_configuration);
     }
 
     WiFiRuntimeState State() const {
@@ -159,26 +154,10 @@ public:
         return _lastScanResults;
     }
 
-    /// <summary>Provides zero-copy guarded access to the latest completed scan results.</summary>
-    /// <remarks>The callback executes while the manager mutex is held and therefore must not call methods that attempt to reacquire the same mutex.</remarks>
-    template<typename Callback>
-    decltype(auto) WithLastScanResults(Callback&& callback) const {
-        std::lock_guard<std::mutex> lock(_mutex);
-        return std::forward<Callback>(callback)(_lastScanResults);
-    }
-
     /// <summary>Returns an owning copy of the currently eligible known-network candidates in external-preferred storage.</summary>
     WiFiVector<ClientNetworkCandidate> EligibleClientNetworks() const {
         std::lock_guard<std::mutex> lock(_mutex);
         return _eligibleCandidates;
-    }
-
-    /// <summary>Provides zero-copy guarded access to the currently eligible known-network candidates.</summary>
-    /// <remarks>The callback executes while the manager mutex is held and therefore must not call methods that attempt to reacquire the same mutex.</remarks>
-    template<typename Callback>
-    decltype(auto) WithEligibleClientNetworks(Callback&& callback) const {
-        std::lock_guard<std::mutex> lock(_mutex);
-        return std::forward<Callback>(callback)(_eligibleCandidates);
     }
 
     void SetWorkSignal(WorkSignal signal) {
