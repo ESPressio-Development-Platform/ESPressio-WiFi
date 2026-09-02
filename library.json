@@ -13,19 +13,19 @@
     "dependencies": [
         {
             "name": "ESPressio-System",
-            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-System.git#feature/1-system-memory-policy"
+            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-System.git#main"
         },
         {
             "name": "ESPressio-Observable",
-            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#feature/16-rtti-free-observer-registry"
+            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#main"
         },
         {
             "name": "ESPressio-Serializable",
-            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#optimisation/25-psram-buffers"
+            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#main"
         },
         {
             "name": "ESPressio-Threads",
-            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#optimisation/69-resource-footprint"
+            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#main"
         }
     ]
 }
