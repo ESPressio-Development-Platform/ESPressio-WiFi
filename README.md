@@ -10,7 +10,7 @@ Autonomous, platform-neutral WiFi lifecycle and configuration. Target-specific i
 - **autonomous WiFi runtime servicing on ESPressio Threads `PrecisionThread`**, removing the need to call `wifi.Poll()` from the application loop;
 - **`APUntilClient` IoT fallback mode**, which exposes an AP only while Client connectivity is unavailable.
 
-WiFi 0.2.1 is validated against the released Serializable 0.11.3 cascade: Observable 3.0.2, Serializable 0.11.3, Units 0.2.7, Timing 2.2.8, Threads 3.1.7, Event 6.0.3, Command 1.0.3, Security 0.4.2 and Persistence 0.3.2.
+During the release restructuring, WiFi is validated against the corresponding ESPressio dependency repositories on `main`.
 
 ## What ESPressio WiFi owns
 
@@ -32,19 +32,19 @@ HTTP, Captive Portal, WebSocket, browser UI and other Web concerns deliberately 
 
 ## Installation
 
-Core WiFi 0.2.1:
+Core WiFi during the release restructuring:
 
 ```ini
 lib_deps =
-    espressio-development-platform/ESPressio-WiFi@^0.2.1
-    espressio-development-platform/ESPressio-Observable@^3.0.2
-    espressio-development-platform/ESPressio-Serializable@^0.11.3
-    espressio-development-platform/ESPressio-Threads@^3.1.7
+    https://github.com/ESPressio-Development-Platform/ESPressio-WiFi.git#main
+    https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#main
+    https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#main
+    https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#main
 ```
 
-On ESP32, also add ESPressio-ESP32. It supplies the concrete `WiFiPlatform` implementation of WiFi's `IWiFiPlatform` contract. Other targets can supply their own implementation without changing the WiFi domain layer.
+On ESP32, also add ESPressio-ESP32 from `main`. It supplies the concrete `WiFiPlatform` implementation of WiFi's `IWiFiPlatform` contract. Other targets can supply their own implementation without changing the WiFi domain layer.
 
-Add Persistence, Security, Event and Command only when selecting those integrations.
+Add Persistence, Security, Event and Command from `main` only when selecting those integrations.
 
 ## Minimal Access Point — no polling required
 
@@ -185,9 +185,9 @@ void setup() {
     home.Priority = 300;
 
     ClientNetworkProfile studio;
-    studio.SSID = "Studio";
-    studio.Password = "studio-password";
-    studio.Priority = 200;
+studio.SSID = "Studio";
+studio.Password = "studio-password";
+studio.Priority = 200;
 
     config.Client.Networks = { home, studio };
 
@@ -404,7 +404,7 @@ WiFiConfigurationStore::Save(storage, "/wifi.espb", config);
 WiFiConfigurationStore::Load(storage, "/wifi.espb", config);
 ```
 
-WiFi 0.2.1 validates this optional integration against Persistence 0.3.2.
+During the release restructuring, this optional integration is validated against Persistence `main`.
 
 ## Protecting remembered credentials
 
@@ -425,7 +425,7 @@ ProtectedWiFiConfigurationStore::Save(
 );
 ```
 
-Protected persistence is validated against Serializable 0.11.3, Persistence 0.3.2 and Security 0.4.2. WiFi never chooses the cipher or owns key material.
+Protected persistence is validated against Serializable `main`, Persistence `main` and Security `main`. WiFi never chooses the cipher or owns key material.
 
 ## Thread safety
 
@@ -441,19 +441,19 @@ Callbacks and Observers are invoked **after internal state locks are released**,
 
 ```text
 WiFi 0.2.1
-    -> System (portable runtime/platform contracts)
-    -> Observable >= 3.0.2 < 4.0.0
-    -> Serializable >= 0.11.3 < 1.0.0
-    -> Threads >= 3.1.7 < 4.0.0
+    -> System main
+    -> Observable main
+    -> Serializable main
+    -> Threads main
 
 platform integration
-    - - -> ESPressio-ESP32 (ESP32 `IWiFiPlatform` implementation)
+    - - -> ESPressio-ESP32 main (ESP32 `IWiFiPlatform` implementation)
 
 optional
-    - - -> Persistence >= 0.3.2 < 1.0.0
-    - - -> Security >= 0.4.2 < 1.0.0
-    - - -> Event >= 6.0.3 < 7.0.0
-    - - -> Command >= 1.0.3 < 2.0.0
+    - - -> Persistence main
+    - - -> Security main
+    - - -> Event main
+    - - -> Command main
 ```
 
 Threads is required because autonomous WiFi servicing is core 0.2.x behaviour. System supplies portable runtime/platform capabilities. Event, Command, Persistence and Security remain opt-in. The concrete ESP32/Arduino/ESP-IDF WiFi implementation is supplied by ESPressio-ESP32 and is not owned by this portable package. Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
