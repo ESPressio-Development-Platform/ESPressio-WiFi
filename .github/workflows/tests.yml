@@ -39,18 +39,18 @@ jobs:
           lib_ldf_mode = deep+
           lib_deps =
               ../ESPressio-WiFi
-              https://github.com/ESPressio-Development-Platform/ESPressio-System.git#feature/1-system-memory-policy
-              https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#feature/16-rtti-free-observer-registry
-              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#optimisation/25-psram-buffers
+              https://github.com/ESPressio-Development-Platform/ESPressio-System.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#main
               https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#feature/29-platform-clock-abstractions
-              https://github.com/ESPressio-Development-Platform/ESPressio-Task.git#feature/1-task-execution
-              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#optimisation/69-resource-footprint
-              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#feature/10-platform-storage-abstractions
-              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#optimisation/23-memory-policy-transient-buffers
-              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#feature/57-rtti-free-memory-efficiency
-              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#feature/30-async-command-routing
-              https://github.com/ESPressio-Development-Platform/ESPressio-ESP32.git#feature/1-system-memory-provider
+              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Task.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-ESP32.git#main
           EOF
           cat > project/consumer/src/main.cpp <<'EOF'
           #include <Arduino.h>
