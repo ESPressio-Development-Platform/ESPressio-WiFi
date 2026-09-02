@@ -1,6 +1,6 @@
 # ESPressio WiFi
 
-Autonomous, platform-neutral WiFi lifecycle and configuration for ESP32 applications.
+Autonomous, platform-neutral WiFi lifecycle and configuration. Target-specific implementations of the WiFi platform contract are supplied by platform packages such as ESPressio-ESP32.
 
 ## Version — 0.2.1
 
@@ -24,7 +24,7 @@ WiFi 0.2.1 is validated against the released Serializable 0.11.3 cascade: Observ
 - DHCP/static Client addressing and AP DHCP-server configuration data.
 - Asynchronous scanning.
 - Direct callbacks and ESPressio Observable notifications.
-- An explicit ESP32 implementation behind `IWiFiPlatform`.
+- The platform-neutral `IWiFiPlatform` contract consumed by `WiFiManager`; concrete ESP32/Arduino/ESP-IDF implementations belong in ESPressio-ESP32.
 - Autonomous runtime execution through ESPressio Threads `PrecisionThread`.
 - Optional Persistence, protected Persistence/Security, Event and Command integrations.
 
@@ -42,6 +42,8 @@ lib_deps =
     espressio-development-platform/ESPressio-Threads@^3.1.7
 ```
 
+On ESP32, also add ESPressio-ESP32. It supplies the concrete `WiFiPlatform` implementation of WiFi's `IWiFiPlatform` contract. Other targets can supply their own implementation without changing the WiFi domain layer.
+
 Add Persistence, Security, Event and Command only when selecting those integrations.
 
 ## Minimal Access Point — no polling required
@@ -49,11 +51,11 @@ Add Persistence, Security, Event and Command only when selecting those integrati
 ```cpp
 #include <ESPressio_WiFi.hpp>
 #include <ESPressio_WiFiWorker.hpp>
-#include <ESPressio_ESP32WiFi.hpp>
+#include <ESPressio_WiFiPlatform.hpp> // provided by ESPressio-ESP32
 
 using namespace ESPressio::WiFi;
 
-ESP32WiFiPlatform platform;
+WiFiPlatform platform;
 WiFiManager wifi(platform);
 WiFiWorker wifiWorker(wifi);
 
@@ -159,11 +161,11 @@ If there are **no remembered networks**, the fallback AP starts immediately beca
 ```cpp
 #include <ESPressio_WiFi.hpp>
 #include <ESPressio_WiFiWorker.hpp>
-#include <ESPressio_ESP32WiFi.hpp>
+#include <ESPressio_WiFiPlatform.hpp> // provided by ESPressio-ESP32
 
 using namespace ESPressio::WiFi;
 
-ESP32WiFiPlatform platform;
+WiFiPlatform platform;
 WiFiManager wifi(platform);
 WiFiWorker wifiWorker(wifi);
 
@@ -183,9 +185,9 @@ void setup() {
     home.Priority = 300;
 
     ClientNetworkProfile studio;
-studio.SSID = "Studio";
-studio.Password = "studio-password";
-studio.Priority = 200;
+    studio.SSID = "Studio";
+    studio.Password = "studio-password";
+    studio.Priority = 200;
 
     config.Client.Networks = { home, studio };
 
@@ -439,9 +441,13 @@ Callbacks and Observers are invoked **after internal state locks are released**,
 
 ```text
 WiFi 0.2.1
+    -> System (portable runtime/platform contracts)
     -> Observable >= 3.0.2 < 4.0.0
     -> Serializable >= 0.11.3 < 1.0.0
     -> Threads >= 3.1.7 < 4.0.0
+
+platform integration
+    - - -> ESPressio-ESP32 (ESP32 `IWiFiPlatform` implementation)
 
 optional
     - - -> Persistence >= 0.3.2 < 1.0.0
@@ -450,6 +456,6 @@ optional
     - - -> Command >= 1.0.3 < 2.0.0
 ```
 
-Threads is required because autonomous WiFi servicing is core 0.2.x behaviour. Event, Command, Persistence and Security remain opt-in. Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
+Threads is required because autonomous WiFi servicing is core 0.2.x behaviour. System supplies portable runtime/platform capabilities. Event, Command, Persistence and Security remain opt-in. The concrete ESP32/Arduino/ESP-IDF WiFi implementation is supplied by ESPressio-ESP32 and is not owned by this portable package. Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
 
 See `ESPRESSIO_DEPENDENCY_CHART.md` and `CHANGELOG.md` for the coordinated platform position and release history.

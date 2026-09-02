@@ -1,14 +1,16 @@
 #pragma once
 
-#include <string>
+#include <string_view>
 #include <utility>
 #include <ESPressio_Persistence_Serializable.hpp>
 #include "ESPressio_IWiFiConfigurationStore.hpp"
 
 namespace ESPressio::WiFi {
 
+/// <summary>Static adapters for persisting arbitrary Serializable Wi-Fi configuration wrappers to file or key/value storage.</summary>
 class WiFiConfigurationStore {
 public:
+    /// <summary>Saves a Serializable configuration to a file-oriented Persistence backend.</summary>
     template<typename TConfiguration>
     static Persistence::SerializablePersistenceResult Save(
         Persistence::IFileStorage& storage, const char* path,
@@ -17,6 +19,7 @@ public:
         return Persistence::SaveSerializable(storage, path, configuration, options);
     }
 
+    /// <summary>Loads a Serializable configuration from a file-oriented Persistence backend.</summary>
     template<typename TConfiguration>
     static Persistence::SerializablePersistenceResult Load(
         Persistence::IFileStorage& storage, const char* path,
@@ -25,6 +28,7 @@ public:
         return Persistence::LoadSerializable(storage, path, configuration, options);
     }
 
+    /// <summary>Saves a Serializable configuration to a key/value Persistence backend.</summary>
     template<typename TConfiguration>
     static Persistence::SerializablePersistenceResult Save(
         Persistence::IKeyValueStorage& storage, const char* key,
@@ -33,6 +37,7 @@ public:
         return Persistence::SaveSerializable(storage, key, configuration, options);
     }
 
+    /// <summary>Loads a Serializable configuration from a key/value Persistence backend.</summary>
     template<typename TConfiguration>
     static Persistence::SerializablePersistenceResult Load(
         Persistence::IKeyValueStorage& storage, const char* key,
@@ -41,6 +46,7 @@ public:
         return Persistence::LoadSerializable(storage, key, configuration, options);
     }
 
+    /// <summary>Translates a generic Serializable Persistence result into the Wi-Fi configuration-store result model.</summary>
     static WiFiConfigurationStoreResult Translate(
         const Persistence::SerializablePersistenceResult& result
     ) {
@@ -64,20 +70,26 @@ public:
     }
 };
 
+/// <summary>IWiFiConfigurationStore implementation backed by an ESPressio file-storage backend.</summary>
 class FileWiFiConfigurationStore final : public IWiFiConfigurationStore {
 public:
+    /// <summary>Constructs a file-backed configuration store and retains its path in externally preferred storage.</summary>
     FileWiFiConfigurationStore(
         Persistence::IFileStorage& storage,
-        std::string path,
+        std::string_view path,
         Persistence::SerializablePersistenceOptions options = {}
-    ) : _storage(storage), _path(std::move(path)), _options(std::move(options)) {}
+    ) : _storage(storage), _options(std::move(options)) {
+        _path.assign(path.data(), path.size());
+    }
 
+    /// <inheritdoc/>
     WiFiConfigurationStoreResult Save(const WiFiConfiguration& configuration) override {
         return WiFiConfigurationStore::Translate(
             WiFiConfigurationStore::Save(_storage, _path.c_str(), configuration, _options)
         );
     }
 
+    /// <inheritdoc/>
     WiFiConfigurationStoreResult Load(WiFiConfiguration& configuration) override {
         return WiFiConfigurationStore::Translate(
             WiFiConfigurationStore::Load(_storage, _path.c_str(), configuration, _options)
@@ -86,24 +98,30 @@ public:
 
 private:
     Persistence::IFileStorage& _storage;
-    std::string _path;
+    WiFiString _path;
     Persistence::SerializablePersistenceOptions _options;
 };
 
+/// <summary>IWiFiConfigurationStore implementation backed by an ESPressio key/value storage backend.</summary>
 class KeyValueWiFiConfigurationStore final : public IWiFiConfigurationStore {
 public:
+    /// <summary>Constructs a key/value-backed configuration store and retains its key in externally preferred storage.</summary>
     KeyValueWiFiConfigurationStore(
         Persistence::IKeyValueStorage& storage,
-        std::string key,
+        std::string_view key,
         Persistence::SerializablePersistenceOptions options = {}
-    ) : _storage(storage), _key(std::move(key)), _options(std::move(options)) {}
+    ) : _storage(storage), _options(std::move(options)) {
+        _key.assign(key.data(), key.size());
+    }
 
+    /// <inheritdoc/>
     WiFiConfigurationStoreResult Save(const WiFiConfiguration& configuration) override {
         return WiFiConfigurationStore::Translate(
             WiFiConfigurationStore::Save(_storage, _key.c_str(), configuration, _options)
         );
     }
 
+    /// <inheritdoc/>
     WiFiConfigurationStoreResult Load(WiFiConfiguration& configuration) override {
         return WiFiConfigurationStore::Translate(
             WiFiConfigurationStore::Load(_storage, _key.c_str(), configuration, _options)
@@ -112,7 +130,7 @@ public:
 
 private:
     Persistence::IKeyValueStorage& _storage;
-    std::string _key;
+    WiFiString _key;
     Persistence::SerializablePersistenceOptions _options;
 };
 

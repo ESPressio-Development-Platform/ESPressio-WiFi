@@ -6,27 +6,58 @@ using namespace ESPressio::WiFi;
 
 class FakePlatform final : public IWiFiPlatform {
 public:
-    WiFiStatus Apply(const WiFiConfiguration& config) override { configured=config; state.Mode=config.Mode; state.Revision++; return WiFiStatus::Success; }
-    WiFiStatus Disable() override { state.Mode=WiFiMode::Disabled; state.Revision++; return WiFiStatus::Success; }
-    WiFiStatus ConnectClient() override { state.Client.State=ClientState::Connecting; state.Revision++; legacyConnects++; return WiFiStatus::Success; }
-    WiFiStatus ConnectClient(const ClientNetworkProfile& profile) override { connectedProfiles.push_back(profile.SSID); state.Client.State=ClientState::Connecting; state.Client.SSID=profile.SSID; state.Revision++; return WiFiStatus::Success; }
-    WiFiStatus DisconnectClient() override { state.Client.State=ClientState::Disconnected; state.Revision++; return WiFiStatus::Success; }
-    WiFiStatus StartAccessPoint() override { state.AccessPoint.State=AccessPointState::Active; state.Revision++; apStarts++; return WiFiStatus::Success; }
-    WiFiStatus StopAccessPoint() override { state.AccessPoint.State=AccessPointState::Disabled; state.Revision++; apStops++; return WiFiStatus::Success; }
-    WiFiStatus StartScan() override { state.Scan=ScanState::Scanning; state.Revision++; scanStarts++; return WiFiStatus::Success; }
-    WiFiStatus Poll(WiFiRuntimeState& output,std::vector<ScanResult>* scans,std::vector<WiFiPlatformEvent>* events) override {
+    WiFiStatus Apply(const WiFiConfiguration& config) override {
+        configured=config; state.Mode=config.Mode; state.Revision++;
+        radioState = {};
+        switch (config.Mode) {
+            case WiFiMode::Client:
+            case WiFiMode::APUntilClient:
+                radioState.Mode=WiFiRadioMode::Station;
+                radioState.StationInterfaceActive=true;
+                break;
+            case WiFiMode::AccessPoint:
+                radioState.Mode=WiFiRadioMode::AccessPoint;
+                radioState.AccessPointInterfaceActive=true;
+                radioState.Channel=config.AccessPoint.Channel;
+                break;
+            case WiFiMode::AccessPointClient:
+                radioState.Mode=WiFiRadioMode::AccessPointStation;
+                radioState.StationInterfaceActive=true;
+                radioState.AccessPointInterfaceActive=true;
+                radioState.Channel=config.AccessPoint.Channel;
+                break;
+            case WiFiMode::Disabled:
+            case WiFiMode::Off:
+                radioState.Mode=WiFiRadioMode::Off;
+                break;
+        }
+        return WiFiStatus::Success;
+    }
+    WiFiStatus Disable() override { state.Mode=WiFiMode::Disabled; state.Revision++; radioState={}; return WiFiStatus::Success; }
+    WiFiStatus ConnectClient() override { state.Client.State=ClientState::Connecting; state.Revision++; legacyConnects++; radioState.StationInterfaceActive=true; if(radioState.Mode==WiFiRadioMode::AccessPoint)radioState.Mode=WiFiRadioMode::AccessPointStation; else if(radioState.Mode==WiFiRadioMode::Off)radioState.Mode=WiFiRadioMode::Station; return WiFiStatus::Success; }
+    WiFiStatus ConnectClient(const ClientNetworkProfile& profile) override { connectedProfiles.push_back(profile.SSID); state.Client.State=ClientState::Connecting; state.Client.SSID=profile.SSID; state.Revision++; radioState.StationInterfaceActive=true; if(radioState.Mode==WiFiRadioMode::AccessPoint)radioState.Mode=WiFiRadioMode::AccessPointStation; else if(radioState.Mode==WiFiRadioMode::Off)radioState.Mode=WiFiRadioMode::Station; return WiFiStatus::Success; }
+    WiFiStatus DisconnectClient() override { state.Client.State=ClientState::Disconnected; state.Revision++; radioState.StationConnected=false; return WiFiStatus::Success; }
+    WiFiStatus StartAccessPoint() override { state.AccessPoint.State=AccessPointState::Active; state.Revision++; apStarts++; radioState.AccessPointInterfaceActive=true; radioState.Channel=configured.AccessPoint.Channel; radioState.Mode=radioState.StationInterfaceActive?WiFiRadioMode::AccessPointStation:WiFiRadioMode::AccessPoint; return WiFiStatus::Success; }
+    WiFiStatus StopAccessPoint() override { state.AccessPoint.State=AccessPointState::Disabled; state.Revision++; apStops++; radioState.AccessPointInterfaceActive=false; radioState.Mode=radioState.StationInterfaceActive?WiFiRadioMode::Station:WiFiRadioMode::Off; return WiFiStatus::Success; }
+    WiFiStatus StartScan() override { state.Scan=ScanState::Scanning; state.Revision++; scanStarts++; radioState.Scanning=true; return WiFiStatus::Success; }
+    WiFiStatus Poll(WiFiRuntimeState& output,WiFiVector<ScanResult>* scans,WiFiVector<WiFiPlatformEvent>* events) override {
         output=state;
-        if (deliverScan && scans) { *scans=nextScan; deliverScan=false; }
+        if (state.Client.State==ClientState::Connected) radioState.StationConnected=true;
+        else if (state.Client.State==ClientState::Disconnected || state.Client.State==ClientState::Failed) radioState.StationConnected=false;
+        if (deliverScan && scans) { *scans=nextScan; deliverScan=false; radioState.Scanning=false; }
+        if (state.Scan==ScanState::Complete || state.Scan==ScanState::Failed) radioState.Scanning=false;
         if (!pending.empty() && events) { *events=pending; pending.clear(); }
         return WiFiStatus::Success;
     }
+    WiFiRadioState GetRadioState() const override { return radioState; }
     WiFiConfiguration configured{};
     WiFiRuntimeState state{};
+    WiFiRadioState radioState{};
     bool deliverScan=false;
     int legacyConnects=0,scanStarts=0,apStarts=0,apStops=0;
-    std::vector<ScanResult> nextScan;
-    std::vector<std::string> connectedProfiles;
-    std::vector<WiFiPlatformEvent> pending;
+    WiFiVector<ScanResult> nextScan;
+    WiFiVector<WiFiString> connectedProfiles;
+    WiFiVector<WiFiPlatformEvent> pending;
 };
 
 class FakeStore final : public IWiFiConfigurationStore {
@@ -41,14 +72,27 @@ public:
     void OnWiFiModeChanged(WiFiMode,WiFiMode) override { modes++; }
     void OnClientStateChanged(const ClientRuntimeState&,const ClientRuntimeState&) override { clients++; }
     void OnAPUntilClientStateChanged(const APUntilClientRuntimeState&,const APUntilClientRuntimeState& after) override { apUntilClientChanges++; apUntilClientStates.push_back(after.State); }
-    void OnScanCompleted(const std::vector<ScanResult>& r) override { scanCompletions++; scans += static_cast<int>(r.size()); }
+    void OnScanCompleted(const WiFiVector<ScanResult>& r) override { scanCompletions++; scans += static_cast<int>(r.size()); }
     void OnClientNetworkSelectionChanged(const ClientNetworkSelectionRuntimeState&,const ClientNetworkSelectionRuntimeState&) override { selectionChanges++; }
     void OnClientNetworkSelected(const ClientNetworkCandidate& c) override { selected.push_back(c.SSID); selectedRSSI.push_back(c.RSSI); }
     void OnClientNoKnownNetworkAvailable() override { noKnown++; }
     int modes=0,clients=0,scanCompletions=0,scans=0,selectionChanges=0,noKnown=0,apUntilClientChanges=0;
-    std::vector<std::string> selected;
+    WiFiVector<WiFiString> selected;
     std::vector<int32_t> selectedRSSI;
     std::vector<APUntilClientState> apUntilClientStates;
+};
+
+class RadioObserver final : public IWiFiRadioObserver {
+public:
+    void OnWiFiRadioTransitionBeginning(const WiFiRadioState& before,WiFiRadioTransitionReason reason) override { beginnings++; beforeModes.push_back(before.Mode); reasons.push_back(reason); }
+    void OnWiFiRadioTransitionCompleted(const WiFiRadioState&,const WiFiRadioState& after,WiFiRadioTransitionReason) override { completions++; afterModes.push_back(after.Mode); }
+    void OnWiFiRadioStateChanged(const WiFiRadioState&,const WiFiRadioState& after) override { stateChanges++; last=after; }
+    void OnWiFiRadioScanBeginning(const WiFiRadioState&) override { scanBeginnings++; }
+    void OnWiFiRadioScanCompleted(const WiFiRadioState& after) override { scanCompletions++; last=after; }
+    int beginnings=0,completions=0,stateChanges=0,scanBeginnings=0,scanCompletions=0;
+    WiFiRadioState last{};
+    std::vector<WiFiRadioMode> beforeModes,afterModes;
+    std::vector<WiFiRadioTransitionReason> reasons;
 };
 
 static ScanResult Visible(const char* ssid,int rssi,uint8_t channel) {
@@ -120,10 +164,6 @@ int main() {
         assert(observer.selected.back()=="Preferred");
         assert(observer.selectedRSSI.back()==-40);
 
-        // HandleCompletedScan() initiated a connection and the fake platform is now
-        // Connecting. Poll that intermediate state before simulating a disconnect;
-        // otherwise the manager would correctly observe Disconnected -> Disconnected
-        // and have no state transition on which to trigger ScanOnDisconnect.
         assert(wifi.ProcessOnce()==WiFiStatus::Success);
         assert(wifi.State().Client.State==ClientState::Connecting);
 
@@ -191,12 +231,52 @@ int main() {
         assert(platform.scanStarts>scansBeforeRetry);
         platform.nextScan={Visible("Home",-30,6)}; platform.deliverScan=true; platform.state.Scan=ScanState::Complete; platform.state.Revision++;
         assert(wifi.ProcessOnce()==WiFiStatus::Success);
-        platform.state.Client.State=ClientState::Connected; platform.state.Client.SSID="Home"; platform.state.Revision++;
+        platform.state.Client.State=ClientState::Connected; platform.state.Client.SSID="Home"; platform.state.Revision++; platform.radioState.StationConnected=true; platform.radioState.Channel=6;
         assert(wifi.ProcessOnce()==WiFiStatus::Success);
         assert(platform.apStops==1);
         assert(!wifi.State().APUntilClient.FallbackAccessPointActive);
         assert(wifi.State().APUntilClient.State==APUntilClientState::ClientConnected);
         assert(observer.apUntilClientChanges>0);
+    }
+
+    // Dedicated low-level radio lifecycle contract. This is intentionally
+    // distinct from the existing application-level IWiFiObserver tests above.
+    {
+        FakePlatform platform;
+        WiFiManager wifi(platform);
+        RadioObserver radioObserver;
+        auto radioHandle=wifi.RegisterRadioObserver(&radioObserver); assert(radioHandle);
+
+        auto config=AutomaticConfig(WiFiMode::APUntilClient);
+        config.Client.Networks.clear();
+        config.AccessPoint.Channel=6;
+        assert(wifi.Configure(config)==WiFiStatus::Success);
+        assert(platform.apStarts==1);
+        const auto snapshot=wifi.RadioState();
+        assert(snapshot.Mode==WiFiRadioMode::AccessPointStation);
+        assert(snapshot.StationInterfaceActive);
+        assert(snapshot.AccessPointInterfaceActive);
+        assert(snapshot.Channel==6);
+        assert(radioObserver.beginnings>=2); // Configure STA, then fallback AP start.
+        assert(radioObserver.completions==radioObserver.beginnings);
+        assert(radioObserver.stateChanges>=1);
+
+        const int scanBeginBefore=radioObserver.scanBeginnings;
+        const int scanCompleteBefore=radioObserver.scanCompletions;
+        assert(wifi.Scan()==WiFiStatus::Success);
+        assert(radioObserver.scanBeginnings==scanBeginBefore+1);
+        platform.nextScan={Visible("Other",-40,11)};
+        platform.deliverScan=true; platform.state.Scan=ScanState::Complete; platform.state.Revision++;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(radioObserver.scanCompletions==scanCompleteBefore+1);
+        assert(!wifi.RadioState().Scanning);
+
+        platform.state.Client.State=ClientState::Connected;
+        platform.radioState.StationConnected=true;
+        platform.radioState.Channel=11;
+        assert(wifi.ProcessOnce()==WiFiStatus::Success);
+        assert(radioObserver.last.StationConnected);
+        assert(radioObserver.last.Channel==11);
     }
 
     return 0;

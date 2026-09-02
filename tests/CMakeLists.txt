@@ -3,34 +3,17 @@ project(ESPressioWiFiTests LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FetchContent)
-
-FetchContent_Declare(ESPressioObservable
-    GIT_REPOSITORY https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git
-    GIT_TAG 3.0.2 GIT_SHALLOW TRUE)
-FetchContent_GetProperties(ESPressioObservable)
-if(NOT espressioobservable_POPULATED)
-    FetchContent_Populate(ESPressioObservable)
-endif()
-
-FetchContent_Declare(ESPressioSerializable
-    GIT_REPOSITORY https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git
-    GIT_TAG 0.11.3 GIT_SHALLOW TRUE)
-FetchContent_GetProperties(ESPressioSerializable)
-if(NOT espressioserializable_POPULATED)
-    FetchContent_Populate(ESPressioSerializable)
-endif()
-
-set(WIFI_TEST_INCLUDES
-    ../src
-    ${espressioobservable_SOURCE_DIR}/src
-    ${espressioserializable_SOURCE_DIR}/src)
-
+FetchContent_Declare(ESPressioSystem GIT_REPOSITORY https://github.com/ESPressio-Development-Platform/ESPressio-System.git GIT_TAG feature/1-system-memory-policy GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(ESPressioSystem)
+FetchContent_Declare(ESPressioObservable GIT_REPOSITORY https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git GIT_TAG feature/16-rtti-free-observer-registry GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(ESPressioObservable)
+FetchContent_Declare(ESPressioSerializable GIT_REPOSITORY https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git GIT_TAG optimisation/25-psram-buffers GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(ESPressioSerializable)
+set(WIFI_TEST_INCLUDES ../src ${espressiosystem_SOURCE_DIR}/src ${espressioobservable_SOURCE_DIR}/src ${espressioserializable_SOURCE_DIR}/src)
 add_executable(espressio_wifi_tests test_wifi.cpp)
 target_include_directories(espressio_wifi_tests PRIVATE ${WIFI_TEST_INCLUDES})
-
 add_executable(espressio_wifi_configuration_tests test_configuration.cpp)
 target_include_directories(espressio_wifi_configuration_tests PRIVATE ${WIFI_TEST_INCLUDES})
-
 enable_testing()
 add_test(NAME ESPressioWiFiTests COMMAND espressio_wifi_tests)
 add_test(NAME ESPressioWiFiConfigurationTests COMMAND espressio_wifi_configuration_tests)

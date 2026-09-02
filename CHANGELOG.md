@@ -2,6 +2,17 @@
 
 ## [0.2.1] - 2026-08-24
 
+### Added
+
+- Added platform-neutral `WiFiRadioState` / `WiFiRadioMode` snapshots exposing the authoritative shared-radio facts required by infrastructure consumers: active STA/AP interfaces, STA connectivity, scan activity, current primary channel and the STA/AP MAC addresses.
+- Added `IWiFiRadioObserver`, a dedicated low-level infrastructure Observer contract kept separate from the existing application-level `IWiFiObserver` API.
+- Added `WiFiManager::RadioState()`, `RegisterRadioObserver()` and `UnregisterRadioObserver()`.
+- Added deterministic radio-transition beginning/completed callbacks around configuration, Client connect/disconnect, Access Point start/stop and automatic remembered-network connection operations.
+- Added explicit WiFi scan beginning/completed radio lifecycle callbacks so shared-radio consumers can quiesce while the ESP32 radio is channel-hopping.
+- Added spontaneous authoritative radio-state change publication from normal worker polling so infrastructure-driven STA/channel changes are visible even when they were not initiated by a direct WiFiManager operation.
+- Added ESP32 radio-state reporting from the native driver through `esp_wifi_get_mode()`, `esp_wifi_get_channel()` and the STA/AP interface MACs.
+- Added host regression coverage for the low-level shared-radio lifecycle independently from normal WiFi Observer behavior.
+
 ### Changed
 
 - Raised required ESPressio Serializable to `>=0.11.3 <1.0.0`.
@@ -9,15 +20,24 @@
 - Updated ESP32 integration validation to released Serializable 0.11.3, Units 0.2.7, Timing 2.2.8, Threads 3.1.7, Persistence 0.3.2, Security 0.4.2, Event 6.0.3 and Command 1.0.3.
 - Removed the temporary Serializable bugfix-branch pin from CI; all ESPressio integration dependencies now use released tags.
 - Updated PlatformIO, Arduino and component version metadata for WiFi 0.2.1.
+- WiFi is now explicitly the authority for shared ESP32 radio mode/channel state. Low-level consumers such as ESP-NOW can coordinate against WiFi synchronously without routing radio-lifecycle control through application Events.
+
+### Architecture
+
+- `IWiFiObserver` remains the application-semantic lifecycle surface and is source-compatible.
+- `IWiFiRadioObserver` is an additive infrastructure surface for components that physically share the WiFi radio.
+- WiFi does not depend on ESP-NOW. The dependency direction remains one-way: optional ESP-NOW integration observes WiFi's authoritative radio lifecycle.
 
 ### Compatibility
 
-- No WiFi public API, configuration schema, runtime state-machine, callback, Observer, Event Bridge, Command or Persistence behaviour changes are introduced by this maintenance release.
-- Existing 0.2.0 applications remain source-compatible.
+- Existing WiFi configuration schema, Commands, Event Bridge, Persistence behavior and application-level Observer callbacks remain source-compatible.
+- The shared-radio lifecycle API is additive.
+- Version metadata intentionally remains **0.2.1** for this in-place correction/development cycle; no new release is introduced by issue #21.
 
 ### Tracking
 
 - Closes #17.
+- Implements #21 — coordinated radio lifecycle for shared-radio consumers such as ESP-NOW.
 
 ## [0.2.0] - 2026-08-23
 

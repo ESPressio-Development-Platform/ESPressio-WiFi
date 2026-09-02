@@ -1,11 +1,9 @@
 name: WiFi Tests
-
 on:
   push:
     branches: [main, 'feature/**', 'chore/**']
   pull_request:
     branches: [main]
-
 jobs:
   host:
     runs-on: ubuntu-latest
@@ -14,16 +12,13 @@ jobs:
       - run: cmake -S . -B build
       - run: cmake --build build --parallel
       - run: ctest --test-dir build --output-on-failure
-
   esp32:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: project/ESPressio-WiFi
+        with: {path: project/ESPressio-WiFi}
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+        with: {python-version: '3.x'}
       - run: pip install platformio
       - name: Create integration consumer
         run: |
@@ -39,53 +34,42 @@ jobs:
           board = esp32dev
           framework = arduino
           extra_scripts = pre:network_include.py
-          build_flags = -std=gnu++17 -frtti
-          build_unflags = -std=gnu++11 -fno-rtti
+          build_flags = -std=gnu++17 -fno-rtti -DESPRESSIO_SERIALIZATION_PREFER_PSRAM
+          build_unflags = -std=gnu++11 -frtti
           lib_ldf_mode = deep+
           lib_deps =
               ../ESPressio-WiFi
-              https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#3.0.2
-              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#0.11.3
-              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#0.2.7
-              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#2.2.8
-              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#3.1.7
-              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#0.3.2
-              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#0.4.2
-              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#6.0.3
-              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#1.0.3
+              https://github.com/ESPressio-Development-Platform/ESPressio-System.git#feature/1-system-memory-policy
+              https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#feature/16-rtti-free-observer-registry
+              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#optimisation/25-psram-buffers
+              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#feature/29-platform-clock-abstractions
+              https://github.com/ESPressio-Development-Platform/ESPressio-Task.git#feature/1-task-execution
+              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#optimisation/69-resource-footprint
+              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#feature/10-platform-storage-abstractions
+              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#optimisation/23-memory-policy-transient-buffers
+              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#feature/57-rtti-free-memory-efficiency
+              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#feature/30-async-command-routing
+              https://github.com/ESPressio-Development-Platform/ESPressio-ESP32.git#feature/1-system-memory-provider
           EOF
           cat > project/consumer/src/main.cpp <<'EOF'
           #include <Arduino.h>
           #include <Network.h>
           #include <WiFi.h>
-          #include <ESPressio_ESP32WiFi.hpp>
+          #include <ESPressio_ESP32.hpp>
+          #include <ESPressio_WiFiPlatform.hpp>
           #include <ESPressio_WiFiWorker.hpp>
           #include <ESPressio_WiFiPersistence.hpp>
           #include <ESPressio_WiFiPersistenceSecurity.hpp>
           #include <ESPressio_WiFiEventBridge.hpp>
           #include <ESPressio_WiFiCommandHandler.hpp>
           using namespace ESPressio;
-          WiFi::ESP32WiFiPlatform platform;
+          WiFi::WiFiPlatform platform;
           WiFi::WiFiManager manager(platform);
           WiFi::WiFiWorker worker(manager);
           WiFi::WiFiCommandHandler commands;
           Event::WiFiEventBridge events;
-          void setup() {
-              WiFi::WiFiConfiguration config;
-              config.Mode = WiFi::WiFiMode::APUntilClient;
-              config.AccessPoint.SSID = "ESPressio-Test";
-              config.Client.Enabled = true;
-              WiFi::ClientNetworkProfile preferred;
-              preferred.SSID = "Preferred";
-              preferred.Password = "password123";
-              preferred.Priority = 200;
-              config.Client.Networks.push_back(preferred);
-              (void)manager.Configure(config);
-              (void)commands.Initialize(Command::CommandRegistry::GetInstance(), manager);
-              (void)events.Initialize(manager);
-              (void)worker.Initialize();
-              (void)worker.Start();
-          }
-          void loop() { delay(1000); }
+          void setup(){ ESP32Platform::InstallSystemProviders(); WiFi::WiFiConfiguration config; config.Mode=WiFi::WiFiMode::APUntilClient; config.AccessPoint.SSID="ESPressio-Test"; config.Client.Enabled=true; WiFi::ClientNetworkProfile preferred; preferred.SSID="Preferred"; preferred.Password="password123"; preferred.Priority=200; config.Client.Networks.push_back(std::move(preferred)); (void)manager.Configure(std::move(config)); (void)commands.Initialize(Command::CommandRegistry::GetInstance(),manager); (void)events.Initialize(manager); (void)worker.Initialize(); (void)worker.Start(); }
+          void loop(){delay(1000);}
           EOF
       - run: pio run -d project/consumer
