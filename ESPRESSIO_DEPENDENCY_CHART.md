@@ -4,26 +4,26 @@ Arrows point from the consuming library to the library it consumes. Solid edges 
 
 ```text
 WiFi 0.2.0
-    -> Observable >= 3.0.2 < 4.0.0
-    -> Serializable >= 0.11.3 < 1.0.0
-    -> Threads >= 3.1.7 < 4.0.0
+    -> Observable main
+    -> Serializable main
+    -> Threads main
 
 WiFi persistence integration
-    - - -> Persistence >= 0.3.2 < 1.0.0
+    - - -> Persistence main
 
 WiFi protected persistence integration
-    - - -> Persistence >= 0.3.2 < 1.0.0
-    - - -> Serializable >= 0.11.3 < 1.0.0
-    - - -> Security >= 0.4.2 < 1.0.0
+    - - -> Persistence main
+    - - -> Serializable main
+    - - -> Security main
 
 WiFi Event bridge
-    - - -> Event >= 6.0.3 < 7.0.0
+    - - -> Event main
 
 WiFi Command handler
-    - - -> Command >= 1.0.3 < 2.0.0
+    - - -> Command main
 
 Serial 0.8.1
-    - - -> WiFi >= 0.2.0 < 1.0.0
+    - - -> WiFi main
 ```
 
 The coordinated released generation validated by WiFi 0.2.0 is:
