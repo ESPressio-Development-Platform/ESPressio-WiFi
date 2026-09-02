@@ -39,18 +39,18 @@ jobs:
           lib_ldf_mode = deep+
           lib_deps =
               ../ESPressio-WiFi
-              https://github.com/ESPressio-Development-Platform/ESPressio-System.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Task.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#main
-              https://github.com/ESPressio-Development-Platform/ESPressio-ESP32.git#main
+              https://github.com/ESPressio-Development-Platform/ESPressio-System.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Task.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-ESP32.git#structural_realignment
           EOF
           cat > project/consumer/src/main.cpp <<'EOF'
           #include <Arduino.h>
