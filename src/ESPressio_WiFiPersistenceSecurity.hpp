@@ -7,6 +7,13 @@
 
 namespace ESPressio::WiFi {
 
+/**
+ * ESPressio Memory Audit
+ * Members: none (standalone empty object occupies 1 byte; an eligible empty base may be optimized to 0 bytes).
+ * Total Memory: 1 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 class ProtectedWiFiConfigurationStore {
 public:
     template<typename TConfiguration>
@@ -81,6 +88,19 @@ public:
     }
 };
 
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 4 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - _storage (Persistence::IFileStorage&): 4 bytes [0 bytes dynamic allocation]
+ * - _path (std::string): 24 bytes [Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - _protection (Serializable::SerializationProtectionConfig): 64 bytes [Context: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - _preferAtomicFileReplace (bool): 1 bytes [0 bytes dynamic allocation]
+ * Total Memory: 100 bytes [_path: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _protection: Context: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 class ProtectedFileWiFiConfigurationStore final : public IWiFiConfigurationStore {
 public:
     ProtectedFileWiFiConfigurationStore(
@@ -112,6 +132,18 @@ private:
     bool _preferAtomicFileReplace = true;
 };
 
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 4 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - _storage (Persistence::IKeyValueStorage&): 4 bytes [0 bytes dynamic allocation]
+ * - _key (std::string): 24 bytes [Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - _protection (Serializable::SerializationProtectionConfig): 64 bytes [Context: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * Total Memory: 96 bytes [_key: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _protection: Context: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 class ProtectedKeyValueWiFiConfigurationStore final : public IWiFiConfigurationStore {
 public:
     ProtectedKeyValueWiFiConfigurationStore(

@@ -4,6 +4,23 @@
 
 using namespace ESPressio::WiFi;
 
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 4 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - configured (WiFiConfiguration): 220 bytes [Hostname: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Networks: Capacity * (64 bytes) element storage; Client: Networks: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Networks: N live elements each: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - state (WiFiRuntimeState): 168 bytes [Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Selection: SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - radioState (WiFiRadioState): 20 bytes [0 bytes dynamic allocation]
+ * - deliverScan (bool): 1 bytes [0 bytes dynamic allocation]
+ * - legacyConnects (int): 4 bytes [0 bytes dynamic allocation]
+ * - nextScan (WiFiVector<ScanResult>): 16 bytes [Capacity * (44 bytes) element storage; N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - connectedProfiles (WiFiVector<WiFiString>): 16 bytes [Capacity * (24 bytes) element storage; N live elements each: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - pending (WiFiVector<WiFiPlatformEvent>): 16 bytes [Capacity * (14 bytes) element storage]
+ * Total Memory: 468 bytes [configured: Hostname: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; configured: Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; configured: Client: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; configured: Client: Networks: Capacity * (64 bytes) element storage; configured: Client: Networks: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; configured: Client: Networks: N live elements each: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; configured: AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; configured: AccessPoint: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; state: Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; state: Client: Selection: SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; state: AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; nextScan: Capacity * (44 bytes) element storage; nextScan: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; connectedProfiles: Capacity * (24 bytes) element storage; connectedProfiles: N live elements each: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; pending: Capacity * (14 bytes) element storage]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 class FakePlatform final : public IWiFiPlatform {
 public:
     WiFiStatus Apply(const WiFiConfiguration& config) override {
@@ -60,6 +77,18 @@ public:
     WiFiVector<WiFiPlatformEvent> pending;
 };
 
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 4 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - saved (WiFiConfiguration): 220 bytes [Hostname: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Networks: Capacity * (64 bytes) element storage; Client: Networks: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Networks: N live elements each: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - has (bool): 1 bytes [0 bytes dynamic allocation]
+ * - saves (int): 4 bytes [0 bytes dynamic allocation]
+ * Total Memory: 232 bytes [saved: Hostname: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; saved: Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; saved: Client: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; saved: Client: Networks: Capacity * (64 bytes) element storage; saved: Client: Networks: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; saved: Client: Networks: N live elements each: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; saved: AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; saved: AccessPoint: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 class FakeStore final : public IWiFiConfigurationStore {
 public:
     WiFiConfigurationStoreResult Save(const WiFiConfiguration& value) override { saved=value; has=true; saves++; return WiFiConfigurationStoreResult::Ok(); }
@@ -67,6 +96,19 @@ public:
     WiFiConfiguration saved{}; bool has=false; int saves=0,loads=0;
 };
 
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 4 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - modes (int): 4 bytes [0 bytes dynamic allocation]
+ * - selected (WiFiVector<WiFiString>): 16 bytes [Capacity * (24 bytes) element storage; N live elements each: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - selectedRSSI (std::vector<int32_t>): 12 bytes [Capacity * (4 bytes) element storage]
+ * - apUntilClientStates (std::vector<APUntilClientState>): 12 bytes [Capacity * (1 bytes) element storage]
+ * Total Memory: 48 bytes [selected: Capacity * (24 bytes) element storage; selected: N live elements each: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; selectedRSSI: Capacity * (4 bytes) element storage; apUntilClientStates: Capacity * (1 bytes) element storage]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 class Observer final : public IWiFiObserver {
 public:
     void OnWiFiModeChanged(WiFiMode,WiFiMode) override { modes++; }
@@ -82,6 +124,20 @@ public:
     std::vector<APUntilClientState> apUntilClientStates;
 };
 
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 4 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - beginnings (int): 4 bytes [0 bytes dynamic allocation]
+ * - last (WiFiRadioState): 20 bytes [0 bytes dynamic allocation]
+ * - beforeModes (std::vector<WiFiRadioMode>): 12 bytes [Capacity * (1 bytes) element storage]
+ * - afterModes (std::vector<WiFiRadioMode>): 12 bytes [Capacity * (1 bytes) element storage]
+ * - reasons (std::vector<WiFiRadioTransitionReason>): 12 bytes [Capacity * (1 bytes) element storage]
+ * Total Memory: 64 bytes [beforeModes: Capacity * (1 bytes) element storage; afterModes: Capacity * (1 bytes) element storage; reasons: Capacity * (1 bytes) element storage]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 class RadioObserver final : public IWiFiRadioObserver {
 public:
     void OnWiFiRadioTransitionBeginning(const WiFiRadioState& before,WiFiRadioTransitionReason reason) override { beginnings++; beforeModes.push_back(before.Mode); reasons.push_back(reason); }

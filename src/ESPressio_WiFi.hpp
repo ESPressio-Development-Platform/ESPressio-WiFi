@@ -16,8 +16,22 @@
 
 namespace ESPressio::WiFi {
 
+/**
+ * ESPressio Memory Audit
+ * Underlying storage: 1 bytes
+ * Total Memory: 1 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 enum class WiFiStatus : uint8_t { Success, InvalidConfiguration, NotSupported, Busy, PlatformError };
 
+/**
+ * ESPressio Memory Audit
+ * Underlying storage: 1 bytes
+ * Total Memory: 1 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 enum class WiFiPlatformEventKind : uint8_t {
     AccessPointStationConnected,
     AccessPointStationDisconnected,
@@ -25,12 +39,29 @@ enum class WiFiPlatformEventKind : uint8_t {
     ClientIPAddressLost
 };
 
+/**
+ * ESPressio Memory Audit
+ * Members:
+ * - Kind (WiFiPlatformEventKind): 1 bytes [0 bytes dynamic allocation]
+ * - Station (MacAddress): 7 bytes [0 bytes dynamic allocation]
+ * - Network (NetworkAddress): 6 bytes [0 bytes dynamic allocation]
+ * Total Memory: 14 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 struct WiFiPlatformEvent {
     WiFiPlatformEventKind Kind{};
     MacAddress Station{};
     NetworkAddress Network{};
 };
 
+/**
+ * ESPressio Memory Audit
+ * Members: none; polymorphic/virtual-base object metadata is included in the total.
+ * Total Memory: 4 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 class IWiFiPlatform {
 public:
     virtual ~IWiFiPlatform() = default;
@@ -53,6 +84,48 @@ public:
 
 /// <summary>Coordinates platform Wi-Fi configuration, runtime state, selection, callbacks, and observers.</summary>
 /// <remarks>Construction is allocation-free for observer infrastructure. Manager and radio observables are materialized only when a corresponding observer is registered, allowing globally constructed managers to avoid pre-provider DRAM allocations. Public state/cache accessors return owning snapshots so no consumer callback executes while the manager state mutex is held.</remarks>
+/**
+ * ESPressio Memory Audit
+ * Members:
+ * - _platform (IWiFiPlatform&): 4 bytes [0 bytes dynamic allocation]
+ * - _clock (Clock): 16 bytes [callable allocation only when target exceeds small-object buffer]
+ * - _mutex (std::mutex): 4 bytes [native synchronization state may allocate platform resources lazily]
+ * - _callbackMutex (std::mutex): 4 bytes [native synchronization state may allocate platform resources lazily]
+ * - _observerMutex (std::mutex): 4 bytes [native synchronization state may allocate platform resources lazily]
+ * - _platformMutex (std::mutex): 4 bytes [native synchronization state may allocate platform resources lazily]
+ * - _radioTransitionMutex (std::recursive_mutex): 4 bytes [native synchronization state may allocate platform resources lazily]
+ * - _radioStateMutex (std::mutex): 4 bytes [native synchronization state may allocate platform resources lazily]
+ * - _configurationStore (IWiFiConfigurationStore*): 4 bytes [0 bytes dynamic allocation]
+ * - _configuration (WiFiConfiguration): 220 bytes [Hostname: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Networks: Capacity * (64 bytes) element storage; Client: Networks: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Networks: N live elements each: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - _state (WiFiRuntimeState): 168 bytes [Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Selection: SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - _selectionState (ClientNetworkSelectionRuntimeState): 40 bytes [SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - _apUntilClientState (APUntilClientRuntimeState): 20 bytes [0 bytes dynamic allocation]
+ * - _lastScanResults (ScanStorage): 12 bytes [Capacity * (44 bytes) element storage; N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - _eligibleCandidates (CandidateStorage): 12 bytes [Capacity * (48 bytes) element storage; N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - _nextCandidateIndex (std::size_t): 4 bytes [0 bytes dynamic allocation]
+ * - _workSignal (CallbackRegistration<WorkSignal>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 16 bytes; pointee: callable allocation only when target exceeds small-object buffer]
+ * - _observable (std::shared_ptr<ManagerObservable>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 96 bytes; pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: enable_shared_from_this: embedded weak_ptr shares a control block when activated; pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 20 bytes; pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _mutex: native synchronization state may allocate platform resources lazily; pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _condition: native condition-variable state may allocate platform synchronization resources; pointee: ThreadSafeObservable: Observable: _registrations: Capacity * (12 bytes) element storage; pointee: ThreadSafeObservable: Observable: _bindings: Capacity * (12 bytes) element storage; pointee: ThreadSafeObservable: _mutex: _owned: owned object: 4 bytes; pointee: ThreadSafeObservable: _mutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily; pointee: ThreadSafeObservable: _notificationMutex: _owned: owned object: 4 bytes; pointee: ThreadSafeObservable: _notificationMutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily]
+ * - _radioObservable (std::shared_ptr<RadioObservable>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 96 bytes; pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: enable_shared_from_this: embedded weak_ptr shares a control block when activated; pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 20 bytes; pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _mutex: native synchronization state may allocate platform resources lazily; pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _condition: native condition-variable state may allocate platform synchronization resources; pointee: ThreadSafeObservable: Observable: _registrations: Capacity * (12 bytes) element storage; pointee: ThreadSafeObservable: Observable: _bindings: Capacity * (12 bytes) element storage; pointee: ThreadSafeObservable: _mutex: _owned: owned object: 4 bytes; pointee: ThreadSafeObservable: _mutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily; pointee: ThreadSafeObservable: _notificationMutex: _owned: owned object: 4 bytes; pointee: ThreadSafeObservable: _notificationMutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily]
+ * - _lastRadioState (WiFiRadioState): 20 bytes [0 bytes dynamic allocation]
+ * - _haveRadioState (bool): 1 bytes [0 bytes dynamic allocation]
+ * - _modeCallback (CallbackRegistration<ModeCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 16 bytes; pointee: callable allocation only when target exceeds small-object buffer]
+ * - _clientCallback (CallbackRegistration<ClientCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes]
+ * - _apCallback (CallbackRegistration<AccessPointCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes]
+ * - _apUntilClientCallback (CallbackRegistration<APUntilClientCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes]
+ * - _scanStateCallback (CallbackRegistration<ScanStateCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 16 bytes; pointee: callable allocation only when target exceeds small-object buffer]
+ * - _scanCallback (CallbackRegistration<ScanCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes]
+ * - _stationConnected (CallbackRegistration<StationCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes]
+ * - _stationDisconnected (CallbackRegistration<StationCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes]
+ * - _ipAcquired (CallbackRegistration<IPAddressCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes]
+ * - _ipLost (CallbackRegistration<IPLostCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 16 bytes; pointee: callable allocation only when target exceeds small-object buffer]
+ * - _selectionCallback (CallbackRegistration<SelectionCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes]
+ * - _selectedCallback (CallbackRegistration<SelectedNetworkCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes]
+ * - _noKnownNetworkCallback (CallbackRegistration<SimpleCallback>): 8 bytes [shared control block (~12+ bytes; allocate_shared may co-locate object) + object 16 bytes; pointee: callable allocation only when target exceeds small-object buffer]
+ * Total Memory: 676 bytes [_clock: callable allocation only when target exceeds small-object buffer; _mutex: native synchronization state may allocate platform resources lazily; _callbackMutex: native synchronization state may allocate platform resources lazily; _observerMutex: native synchronization state may allocate platform resources lazily; _platformMutex: native synchronization state may allocate platform resources lazily; _radioTransitionMutex: native synchronization state may allocate platform resources lazily; _radioStateMutex: native synchronization state may allocate platform resources lazily; _configuration: Hostname: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _configuration: Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _configuration: Client: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _configuration: Client: Networks: Capacity * (64 bytes) element storage; _configuration: Client: Networks: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _configuration: Client: Networks: N live elements each: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _configuration: AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _configuration: AccessPoint: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _state: Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _state: Client: Selection: SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _state: AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _selectionState: SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _lastScanResults: Capacity * (44 bytes) element storage; _lastScanResults: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _eligibleCandidates: Capacity * (48 bytes) element storage; _eligibleCandidates: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; _workSignal: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 16 bytes; _workSignal: pointee: callable allocation only when target exceeds small-object buffer; _observable: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 96 bytes; _observable: pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: enable_shared_from_this: embedded weak_ptr shares a control block when activated; _observable: pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 20 bytes; _observable: pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _mutex: native synchronization state may allocate platform resources lazily; _observable: pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _condition: native condition-variable state may allocate platform synchronization resources; _observable: pointee: ThreadSafeObservable: Observable: _registrations: Capacity * (12 bytes) element storage; _observable: pointee: ThreadSafeObservable: Observable: _bindings: Capacity * (12 bytes) element storage; _observable: pointee: ThreadSafeObservable: _mutex: _owned: owned object: 4 bytes; _observable: pointee: ThreadSafeObservable: _mutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily; _observable: pointee: ThreadSafeObservable: _notificationMutex: _owned: owned object: 4 bytes; _observable: pointee: ThreadSafeObservable: _notificationMutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily; _radioObservable: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 96 bytes; _radioObservable: pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: enable_shared_from_this: embedded weak_ptr shares a control block when activated; _radioObservable: pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 20 bytes; _radioObservable: pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _mutex: native synchronization state may allocate platform resources lazily; _radioObservable: pointee: ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _condition: native condition-variable state may allocate platform synchronization resources; _radioObservable: pointee: ThreadSafeObservable: Observable: _registrations: Capacity * (12 bytes) element storage; _radioObservable: pointee: ThreadSafeObservable: Observable: _bindings: Capacity * (12 bytes) element storage; _radioObservable: pointee: ThreadSafeObservable: _mutex: _owned: owned object: 4 bytes; _radioObservable: pointee: ThreadSafeObservable: _mutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily; _radioObservable: pointee: ThreadSafeObservable: _notificationMutex: _owned: owned object: 4 bytes; _radioObservable: pointee: ThreadSafeObservable: _notificationMutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily; _modeCallback: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 16 bytes; _modeCallback: pointee: callable allocation only when target exceeds small-object buffer; _clientCallback: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes; _apCallback: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes; _apUntilClientCallback: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes; _scanStateCallback: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 16 bytes; _scanStateCallback: pointee: callable allocation only when target exceeds small-object buffer; _scanCallback: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes; _stationConnected: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes; _stationDisconnected: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes; _ipAcquired: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes; _ipLost: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 16 bytes; _ipLost: pointee: callable allocation only when target exceeds small-object buffer; _selectionCallback: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes; _selectedCallback: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 4 bytes; _noKnownNetworkCallback: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 16 bytes; _noKnownNetworkCallback: pointee: callable allocation only when target exceeds small-object buffer]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 class WiFiManager {
 private:
     using ScanStorage = WiFiVector<ScanResult>;
@@ -61,7 +134,15 @@ private:
     static constexpr auto ExternalPreferred =
         System::Memory::MemoryPolicy::ExternalPreferred;
 
-    class ManagerObservable final : public Observable::ThreadSafeObservable {
+        /**
+     * ESPressio Memory Audit
+     * Inherited Memory Total: 96 bytes [ThreadSafeObservable: Observable: IUntypedObservable: IObservable: enable_shared_from_this: embedded weak_ptr shares a control block when activated; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 20 bytes; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _mutex: native synchronization state may allocate platform resources lazily; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _condition: native condition-variable state may allocate platform synchronization resources; ThreadSafeObservable: Observable: _registrations: Capacity * (12 bytes) element storage; ThreadSafeObservable: Observable: _bindings: Capacity * (12 bytes) element storage; ThreadSafeObservable: _mutex: _owned: owned object: 4 bytes; ThreadSafeObservable: _mutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily; ThreadSafeObservable: _notificationMutex: _owned: owned object: 4 bytes; ThreadSafeObservable: _notificationMutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily]
+     * Members: none (standalone empty object occupies 1 byte; an eligible empty base may be optimized to 0 bytes).
+     * Total Memory: 96 bytes [ThreadSafeObservable: Observable: IUntypedObservable: IObservable: enable_shared_from_this: embedded weak_ptr shares a control block when activated; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 20 bytes; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _mutex: native synchronization state may allocate platform resources lazily; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _condition: native condition-variable state may allocate platform synchronization resources; ThreadSafeObservable: Observable: _registrations: Capacity * (12 bytes) element storage; ThreadSafeObservable: Observable: _bindings: Capacity * (12 bytes) element storage; ThreadSafeObservable: _mutex: _owned: owned object: 4 bytes; ThreadSafeObservable: _mutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily; ThreadSafeObservable: _notificationMutex: _owned: owned object: 4 bytes; ThreadSafeObservable: _notificationMutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily]
+     * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+     * End ESPressio Memory Audit
+     */
+class ManagerObservable final : public Observable::ThreadSafeObservable {
         template<typename F> void Notify(F&& callback) {
             ExecuteNotification([&](NotificationContext& n) {
                 n.WithObservers<IWiFiObserver>([&](IWiFiObserver* o) {
@@ -85,7 +166,15 @@ private:
         void NoKnownNetwork() { Notify([](IWiFiObserver* o){ o->OnClientNoKnownNetworkAvailable(); }); }
     };
 
-    class RadioObservable final : public Observable::ThreadSafeObservable {
+        /**
+     * ESPressio Memory Audit
+     * Inherited Memory Total: 96 bytes [ThreadSafeObservable: Observable: IUntypedObservable: IObservable: enable_shared_from_this: embedded weak_ptr shares a control block when activated; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 20 bytes; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _mutex: native synchronization state may allocate platform resources lazily; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _condition: native condition-variable state may allocate platform synchronization resources; ThreadSafeObservable: Observable: _registrations: Capacity * (12 bytes) element storage; ThreadSafeObservable: Observable: _bindings: Capacity * (12 bytes) element storage; ThreadSafeObservable: _mutex: _owned: owned object: 4 bytes; ThreadSafeObservable: _mutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily; ThreadSafeObservable: _notificationMutex: _owned: owned object: 4 bytes; ThreadSafeObservable: _notificationMutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily]
+     * Members: none (standalone empty object occupies 1 byte; an eligible empty base may be optimized to 0 bytes).
+     * Total Memory: 96 bytes [ThreadSafeObservable: Observable: IUntypedObservable: IObservable: enable_shared_from_this: embedded weak_ptr shares a control block when activated; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: shared control block (~12+ bytes; allocate_shared may co-locate object) + object 20 bytes; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _mutex: native synchronization state may allocate platform resources lazily; ThreadSafeObservable: Observable: IUntypedObservable: IObservable: _lifetimeControl: pointee: _condition: native condition-variable state may allocate platform synchronization resources; ThreadSafeObservable: Observable: _registrations: Capacity * (12 bytes) element storage; ThreadSafeObservable: Observable: _bindings: Capacity * (12 bytes) element storage; ThreadSafeObservable: _mutex: _owned: owned object: 4 bytes; ThreadSafeObservable: _mutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily; ThreadSafeObservable: _notificationMutex: _owned: owned object: 4 bytes; ThreadSafeObservable: _notificationMutex: _fallback: _mutex: native synchronization state may allocate platform resources lazily]
+     * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+     * End ESPressio Memory Audit
+     */
+class RadioObservable final : public Observable::ThreadSafeObservable {
         template<typename F> void Notify(F&& callback) {
             ExecuteNotification([&](NotificationContext& n) {
                 n.WithObservers<IWiFiRadioObserver>([&](IWiFiRadioObserver* o) {

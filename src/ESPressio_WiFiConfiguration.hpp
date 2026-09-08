@@ -8,6 +8,21 @@
 namespace ESPressio::WiFi {
 
 /// <summary>Persistable client-network profile considered during automatic network selection.</summary>
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - SSID (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - Password (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - Priority (uint16_t): 2 bytes [0 bytes dynamic allocation]
+ * - Enabled (bool): 1 bytes [0 bytes dynamic allocation]
+ * - Addressing (AddressMode): 1 bytes [0 bytes dynamic allocation]
+ * - StaticNetwork (NetworkAddress): 6 bytes [0 bytes dynamic allocation]
+ * Total Memory: 64 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 struct ClientNetworkProfile final : Serializable::Serializable<ClientNetworkProfile> {
     ESPRESSIO_SERIALIZABLE_TYPE(ClientNetworkProfile)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -37,6 +52,18 @@ struct ClientNetworkProfile final : Serializable::Serializable<ClientNetworkProf
 };
 
 /// <summary>Controls automatic selection and retry behavior across known client networks.</summary>
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - AutomaticSelection (bool): 1 bytes [0 bytes dynamic allocation]
+ * - ScanOnStartup (bool): 1 bytes [0 bytes dynamic allocation]
+ * - ScanOnDisconnect (bool): 1 bytes [0 bytes dynamic allocation]
+ * - TryNextOnFailure (bool): 1 bytes [0 bytes dynamic allocation]
+ * Total Memory: 5 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 struct ClientNetworkSelectionConfiguration final
     : Serializable::Serializable<ClientNetworkSelectionConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(ClientNetworkSelectionConfiguration)
@@ -61,6 +88,22 @@ struct ClientNetworkSelectionConfiguration final
 };
 
 /// <summary>Persistable station/client configuration including direct credentials and preferred-network profiles.</summary>
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - Enabled (bool): 1 bytes [0 bytes dynamic allocation]
+ * - SSID (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - Password (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - Addressing (AddressMode): 1 bytes [0 bytes dynamic allocation]
+ * - StaticNetwork (NetworkAddress): 6 bytes [0 bytes dynamic allocation]
+ * - Networks (WiFiVector<ClientNetworkProfile>): 12 bytes [Capacity * (64 bytes) element storage; N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; N live elements each: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - Selection (ClientNetworkSelectionConfiguration): 5 bytes [0 bytes dynamic allocation]
+ * Total Memory: 80 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Networks: Capacity * (64 bytes) element storage; Networks: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Networks: N live elements each: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 struct ClientConfiguration final : Serializable::Serializable<ClientConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(ClientConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(2)
@@ -98,6 +141,18 @@ struct ClientConfiguration final : Serializable::Serializable<ClientConfiguratio
 };
 
 /// <summary>DHCP server configuration used by the local access point.</summary>
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - Enabled (bool): 1 bytes [0 bytes dynamic allocation]
+ * - LeaseStart (IPv4Address): 1 bytes [0 bytes dynamic allocation]
+ * - LeaseEnd (IPv4Address): 1 bytes [0 bytes dynamic allocation]
+ * - LeaseDurationSeconds (uint32_t): 4 bytes [0 bytes dynamic allocation]
+ * Total Memory: 8 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(DHCPServerConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -121,6 +176,22 @@ struct DHCPServerConfiguration final : Serializable::Serializable<DHCPServerConf
 };
 
 /// <summary>Persistable local access-point configuration.</summary>
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - SSID (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - Password (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - Channel (uint8_t): 1 bytes [0 bytes dynamic allocation]
+ * - Hidden (bool): 1 bytes [0 bytes dynamic allocation]
+ * - MaximumClients (uint8_t): 1 bytes [0 bytes dynamic allocation]
+ * - Network (NetworkAddress): 6 bytes [0 bytes dynamic allocation]
+ * - DHCP (DHCPServerConfiguration): 8 bytes [0 bytes dynamic allocation]
+ * Total Memory: 72 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 struct AccessPointConfiguration final : Serializable::Serializable<AccessPointConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(AccessPointConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -163,6 +234,20 @@ struct AccessPointConfiguration final : Serializable::Serializable<AccessPointCo
 };
 
 /// <summary>Controls client reconnection timing and retry behavior.</summary>
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - Enabled (bool): 1 bytes [0 bytes dynamic allocation]
+ * - InitialDelayMilliseconds (uint32_t): 4 bytes [0 bytes dynamic allocation]
+ * - MaximumDelayMilliseconds (uint32_t): 4 bytes [0 bytes dynamic allocation]
+ * - BackoffMultiplier (float): 4 bytes [0 bytes dynamic allocation]
+ * - MaximumAttempts (uint32_t): 4 bytes [0 bytes dynamic allocation]
+ * - ConnectionTimeoutMilliseconds (uint32_t): 4 bytes [0 bytes dynamic allocation]
+ * Total Memory: 24 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
     ESPRESSIO_SERIALIZABLE_TYPE(ReconnectPolicy)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -192,6 +277,16 @@ struct ReconnectPolicy final : Serializable::Serializable<ReconnectPolicy> {
 };
 
 /// <summary>Controls fallback timing for AP-until-client operating mode.</summary>
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - FallbackTimeoutMilliseconds (uint32_t): 4 bytes [0 bytes dynamic allocation]
+ * - RetryScanIntervalMilliseconds (uint32_t): 4 bytes [0 bytes dynamic allocation]
+ * Total Memory: 12 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 struct APUntilClientConfiguration final : Serializable::Serializable<APUntilClientConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(APUntilClientConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -209,6 +304,23 @@ struct APUntilClientConfiguration final : Serializable::Serializable<APUntilClie
 };
 
 /// <summary>Top-level persistable configuration for ESPressio Wi-Fi operation.</summary>
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - Mode (WiFiMode): 1 bytes [0 bytes dynamic allocation]
+ * - Hostname (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - Client (ClientConfiguration): 80 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Networks: Capacity * (64 bytes) element storage; Networks: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Networks: N live elements each: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - AccessPoint (AccessPointConfiguration): 72 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * - Reconnect (ReconnectPolicy): 24 bytes [0 bytes dynamic allocation]
+ * - APUntilClient (APUntilClientConfiguration): 12 bytes [0 bytes dynamic allocation]
+ * - TxPowerDbm (int8_t): 1 bytes [0 bytes dynamic allocation]
+ * - PowerSave (bool): 1 bytes [0 bytes dynamic allocation]
+ * Total Memory: 220 bytes [Hostname: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Networks: Capacity * (64 bytes) element storage; Client: Networks: N live elements each: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Networks: N live elements each: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: Password: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 struct WiFiConfiguration final : Serializable::Serializable<WiFiConfiguration> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiConfiguration)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(3)

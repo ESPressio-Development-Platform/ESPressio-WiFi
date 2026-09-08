@@ -6,6 +6,13 @@
 namespace ESPressio::WiFi {
 
 /// <summary>Outcome classification for persisted Wi-Fi configuration operations.</summary>
+/**
+ * ESPressio Memory Audit
+ * Underlying storage: 1 bytes
+ * Total Memory: 1 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 enum class WiFiConfigurationStoreStatus : uint8_t {
     Success,
     NotConfigured,
@@ -16,6 +23,16 @@ enum class WiFiConfigurationStoreStatus : uint8_t {
 };
 
 /// <summary>Result returned by Wi-Fi configuration stores.</summary>
+/**
+ * ESPressio Memory Audit
+ * Members:
+ * - Status (WiFiConfigurationStoreStatus): 1 bytes [0 bytes dynamic allocation]
+ * - Message (std::string): 24 bytes [Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * Total Memory: 28 bytes [Message: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 struct WiFiConfigurationStoreResult {
     /// <summary>Operation outcome.</summary>
     WiFiConfigurationStoreStatus Status = WiFiConfigurationStoreStatus::Success;
@@ -35,6 +52,13 @@ struct WiFiConfigurationStoreResult {
 };
 
 /// <summary>Persistence contract for saving and loading complete Wi-Fi configurations.</summary>
+/**
+ * ESPressio Memory Audit
+ * Members: none; polymorphic/virtual-base object metadata is included in the total.
+ * Total Memory: 4 bytes [0 bytes dynamic allocation]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * End ESPressio Memory Audit
+ */
 class IWiFiConfigurationStore {
 public:
     virtual ~IWiFiConfigurationStore() = default;

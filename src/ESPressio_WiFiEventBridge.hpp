@@ -7,6 +7,17 @@
 namespace ESPressio::Event {
 
 /// <summary>Bridges Wi-Fi observer callbacks into queued ESPressio Event instances.</summary>
+/**
+ * ESPressio Memory Audit
+ * Inherited Memory Total: 4 bytes [0 bytes dynamic allocation]
+ * Members:
+ * - _observer (Observable::ObserverHandlePtr): 12 bytes [owned object: 4 bytes]
+ * - _initialized (bool): 1 bytes [0 bytes dynamic allocation]
+ * Total Memory: 20 bytes [_observer: owned object: 4 bytes]
+ * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
+ * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
+ * End ESPressio Memory Audit
+ */
 class WiFiEventBridge final : public WiFi::IWiFiObserver {
 public:
     /// <summary>Registers the bridge with a WiFiManager.</summary>
