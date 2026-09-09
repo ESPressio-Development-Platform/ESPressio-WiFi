@@ -17,15 +17,15 @@
         },
         {
             "name": "ESPressio-Observable",
-            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#structural_realignment"
+            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#primitives_redesign"
         },
         {
             "name": "ESPressio-Serializable",
-            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#structural_realignment"
+            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#primitives_redesign"
         },
         {
             "name": "ESPressio-Threads",
-            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#structural_realignment"
+            "version": "https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#primitives_redesign"
         }
     ]
 }
