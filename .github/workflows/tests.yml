@@ -40,17 +40,17 @@ jobs:
           lib_deps =
               ../ESPressio-WiFi
               https://github.com/ESPressio-Development-Platform/ESPressio-System.git#structural_realignment
-              https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#structural_realignment
-              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#structural_realignment
-              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#structural_realignment
-              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#primitives_redesign
+              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#primitives_redesign
+              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#primitives_redesign
+              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#primitives_redesign
               https://github.com/ESPressio-Development-Platform/ESPressio-Task.git#structural_realignment
-              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#structural_realignment
-              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#structural_realignment
-              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#structural_realignment
-              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#structural_realignment
-              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#structural_realignment
-              https://github.com/ESPressio-Development-Platform/ESPressio-ESP32.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#primitives_redesign
+              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#primitives_redesign
+              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#primitives_redesign
+              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#primitives_redesign
+              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#primitives_redesign
+              https://github.com/ESPressio-Development-Platform/ESPressio-ESP32.git#primitives_redesign
           EOF
           cat > project/consumer/src/main.cpp <<'EOF'
           #include <Arduino.h>
