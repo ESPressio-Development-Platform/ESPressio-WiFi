@@ -39,12 +39,12 @@ jobs:
           lib_ldf_mode = deep+
           lib_deps =
               ../ESPressio-WiFi
-              https://github.com/ESPressio-Development-Platform/ESPressio-System.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-System.git#primitives_redesign
               https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#primitives_redesign
               https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#primitives_redesign
               https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#primitives_redesign
               https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Task.git#structural_realignment
+              https://github.com/ESPressio-Development-Platform/ESPressio-Task.git#primitives_redesign
               https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#primitives_redesign
               https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#primitives_redesign
               https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#primitives_redesign
@@ -69,7 +69,7 @@ jobs:
           WiFi::WiFiWorker worker(manager);
           WiFi::WiFiCommandHandler commands;
           Event::WiFiEventBridge events;
-          void setup(){ ESP32Platform::InstallSystemProviders(); WiFi::WiFiConfiguration config; config.Mode=WiFi::WiFiMode::APUntilClient; config.AccessPoint.SSID="ESPressio-Test"; config.Client.Enabled=true; WiFi::ClientNetworkProfile preferred; preferred.SSID="Preferred"; preferred.Password="password123"; preferred.Priority=200; config.Client.Networks.push_back(std::move(preferred)); (void)manager.Configure(std::move(config)); (void)commands.Initialize(Command::CommandRegistry::GetInstance(),manager); (void)events.Initialize(manager); (void)worker.Initialize(); (void)worker.Start(); }
+          void setup(){ ESP32Platform::InstallSystemProviders(); WiFi::WiFiConfiguration config; config.Mode=WiFi::WiFiMode::APUntilClient; config.AccessPoint.SSID="ESPressio-Test"; config.Client.Enabled=true; WiFi::ClientNetworkProfile preferred; preferred.SSID="Preferred"; preferred.Password="test-passphrase"; preferred.Priority=200; config.Client.Networks.push_back(std::move(preferred)); (void)manager.Configure(std::move(config)); (void)commands.Initialize(Command::CommandRegistry::GetInstance(),manager); (void)events.Initialize(manager); (void)worker.Initialize(); (void)worker.Start(); }
           void loop(){delay(1000);}
           EOF
       - run: pio run -d project/consumer
