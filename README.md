@@ -2,9 +2,7 @@
 
 Autonomous, platform-neutral WiFi lifecycle and configuration. Target-specific implementations of the WiFi platform contract are supplied by platform packages such as ESPressio-ESP32.
 
-## Version — 0.2.1
-
-0.2.0 added three core capabilities retained unchanged by this 0.2.1 dependency-maintenance release:
+The library provides three core capabilities:
 
 - **remembered Client networks with deterministic priority-based automatic selection and failover**;
 - **autonomous WiFi runtime servicing on ESPressio Threads `PrecisionThread`**, removing the need to call `wifi.Poll()` from the application loop;
@@ -456,4 +454,4 @@ optional
     - - -> Command main
 ```
 
-Threads is required because autonomous WiFi servicing is core 0.2.x behaviour. System supplies portable runtime/platform capabilities. Event, Command, Persistence and Security remain opt-in. The concrete ESP32/Arduino/ESP-IDF WiFi implementation is supplied by ESPressio-ESP32 and is not owned by this portable package. Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
+Threads is required because autonomous WiFi servicing is core behaviour. System supplies portable runtime/platform capabilities. Event, Command, Persistence and Security remain opt-in. The concrete ESP32/Arduino/ESP-IDF WiFi implementation is supplied by ESPressio-ESP32 and is not owned by this portable package. Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
