@@ -260,7 +260,7 @@ wifi.OnAPUntilClientStateChanged([](
         "APUntilClient state %u -> %u, fallback AP=%s\n",
         static_cast<unsigned>(before.State),
         static_cast<unsigned>(after.State),
-        after.FallbackAccessPointActive ? "active" : "inactive"
+        after.FallbackAccessPointActive ? "active": "inactive"
     );
 });
 ```
@@ -340,7 +340,7 @@ wifi.OnClientNoKnownNetworkAvailable([]() {
 
 ```cpp
 wifi.OnScanCompleted([](const std::vector<ScanResult>& networks) {
-    for (const auto& network : networks) {
+    for (const auto& network: networks) {
         Serial.printf("%s RSSI=%d channel=%u\n",
             network.SSID.c_str(), network.RSSI, network.Channel);
     }
@@ -429,7 +429,7 @@ Protected persistence is validated against Serializable `main`, Persistence `mai
 
 ## Thread safety
 
-WiFi 0.2.1 treats `WiFiManager` as a concurrently accessed service. Configuration, runtime state, scan results, remembered profiles and selection state are synchronized internally.
+WiFi treats `WiFiManager` as a concurrently accessed service. Configuration, runtime state, scan results, remembered profiles and selection state are synchronized internally.
 
 Callbacks and Observers are invoked **after internal state locks are released**, so notifications may safely call back into WiFi without being invoked beneath the manager state mutex. `Configuration()`, `State()`, `LastScanResults()` and `EligibleClientNetworks()` return snapshots rather than exposing mutable internal references.
 
@@ -440,7 +440,7 @@ Callbacks and Observers are invoked **after internal state locks are released**,
 ## Dependencies
 
 ```text
-WiFi 0.2.1
+WiFi
     -> System main
     -> Observable main
     -> Serializable main
@@ -457,5 +457,3 @@ optional
 ```
 
 Threads is required because autonomous WiFi servicing is core 0.2.x behaviour. System supplies portable runtime/platform capabilities. Event, Command, Persistence and Security remain opt-in. The concrete ESP32/Arduino/ESP-IDF WiFi implementation is supplied by ESPressio-ESP32 and is not owned by this portable package. Serial may consume WiFi, never the reverse. Web infrastructure is intentionally excluded.
-
-See `ESPRESSIO_DEPENDENCY_CHART.md` and `CHANGELOG.md` for the coordinated platform position and release history.
