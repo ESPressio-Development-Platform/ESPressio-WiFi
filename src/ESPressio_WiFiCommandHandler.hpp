@@ -9,16 +9,7 @@
 
 namespace ESPressio::WiFi {
 
-/**
- * ESPressio Memory Audit
- * Members:
- * - _manager (WiFiManager*): 4 bytes [0 bytes dynamic allocation]
- * - _registration (Command::CommandRegistrationHandle): 16 bytes [path_: Capacity * (24 bytes) element storage; path_: N live elements each: CommandStringStorage: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Total Memory: 20 bytes [_registration: path_: Capacity * (24 bytes) element storage; _registration: path_: N live elements each: CommandStringStorage: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
- * End ESPressio Memory Audit
- */
+
 class WiFiCommandHandler {
 public:
     bool Initialize(Command::CommandRegistry& registry, WiFiManager& manager) {

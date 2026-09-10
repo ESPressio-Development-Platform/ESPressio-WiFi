@@ -6,15 +6,7 @@
 namespace ESPressio::Event {
 
 /// <summary>Serializable event describing an application-level Wi-Fi mode transition.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members:
- * - After (WiFi::WiFiMode): 1 bytes [0 bytes dynamic allocation]
- * Total Memory: 28 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 class WiFiModeChangedEvent final : public SerializableEvent<WiFiModeChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiModeChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -27,18 +19,7 @@ public:
 };
 
 /// <summary>Serializable event describing a client/station state transition and resulting network state.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members:
- * - After (WiFi::ClientState): 1 bytes [0 bytes dynamic allocation]
- * - SSID (WiFi::WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * - Network (WiFi::NetworkAddress): 6 bytes [0 bytes dynamic allocation]
- * Total Memory: 60 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
- * End ESPressio Memory Audit
- */
+
 class WiFiClientStateChangedEvent final : public SerializableEvent<WiFiClientStateChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientStateChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -57,18 +38,7 @@ public:
 };
 
 /// <summary>Serializable event describing an access-point state transition.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members:
- * - After (WiFi::AccessPointState): 1 bytes [0 bytes dynamic allocation]
- * - SSID (WiFi::WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * - ConnectedStations (uint16_t): 2 bytes [0 bytes dynamic allocation]
- * Total Memory: 56 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
- * End ESPressio Memory Audit
- */
+
 class WiFiAccessPointStateChangedEvent final : public SerializableEvent<WiFiAccessPointStateChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiAccessPointStateChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -87,18 +57,7 @@ public:
 };
 
 /// <summary>Serializable event describing an AP-until-client fallback state transition.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members:
- * - After (WiFi::APUntilClientState): 1 bytes [0 bytes dynamic allocation]
- * - FallbackAccessPointActive (bool): 1 bytes [0 bytes dynamic allocation]
- * - FallbackDeadlineMilliseconds (uint64_t): 8 bytes [0 bytes dynamic allocation]
- * - NextRetryMilliseconds (uint64_t): 8 bytes [0 bytes dynamic allocation]
- * Total Memory: 44 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 class WiFiAPUntilClientStateChangedEvent final : public SerializableEvent<WiFiAPUntilClientStateChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiAPUntilClientStateChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -123,15 +82,7 @@ public:
 };
 
 /// <summary>Serializable event describing a Wi-Fi scan-state transition.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members:
- * - After (WiFi::ScanState): 1 bytes [0 bytes dynamic allocation]
- * Total Memory: 28 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 class WiFiScanStateChangedEvent final : public SerializableEvent<WiFiScanStateChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiScanStateChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -144,14 +95,7 @@ public:
 };
 
 /// <summary>Serializable event containing the completed Wi-Fi scan result set in externally preferred storage.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members: none (standalone empty object occupies 1 byte; an eligible empty base may be optimized to 0 bytes).
- * Total Memory: 24 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 class WiFiScanCompletedEvent final : public SerializableEvent<WiFiScanCompletedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiScanCompletedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -163,14 +107,7 @@ public:
 };
 
 /// <summary>Serializable event identifying a station that connected to the local access point.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members: none (standalone empty object occupies 1 byte; an eligible empty base may be optimized to 0 bytes).
- * Total Memory: 24 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 class WiFiAccessPointStationConnectedEvent final : public SerializableEvent<WiFiAccessPointStationConnectedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiAccessPointStationConnectedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -182,14 +119,7 @@ public:
 };
 
 /// <summary>Serializable event identifying a station that disconnected from the local access point.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members: none (standalone empty object occupies 1 byte; an eligible empty base may be optimized to 0 bytes).
- * Total Memory: 24 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 class WiFiAccessPointStationDisconnectedEvent final : public SerializableEvent<WiFiAccessPointStationDisconnectedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiAccessPointStationDisconnectedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -201,14 +131,7 @@ public:
 };
 
 /// <summary>Serializable event reporting the network address acquired by the client interface.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members: none (standalone empty object occupies 1 byte; an eligible empty base may be optimized to 0 bytes).
- * Total Memory: 24 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 class WiFiClientIPAddressAcquiredEvent final : public SerializableEvent<WiFiClientIPAddressAcquiredEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientIPAddressAcquiredEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -220,14 +143,7 @@ public:
 };
 
 /// <summary>Serializable event reporting loss of the client interface IP address.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members: none (standalone empty object occupies 1 byte; an eligible empty base may be optimized to 0 bytes).
- * Total Memory: 24 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 class WiFiClientIPAddressLostEvent final : public SerializableEvent<WiFiClientIPAddressLostEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientIPAddressLostEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -236,19 +152,7 @@ public:
 };
 
 /// <summary>Serializable event describing preferred-client-network selection state and candidate metadata.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members:
- * - After (WiFi::ClientNetworkSelectionState): 1 bytes [0 bytes dynamic allocation]
- * - SelectedSSID (WiFi::WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * - SelectedPriority (uint16_t): 2 bytes [0 bytes dynamic allocation]
- * - EligibleCandidateCount (uint32_t): 4 bytes [0 bytes dynamic allocation]
- * Total Memory: 60 bytes [SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
- * End ESPressio Memory Audit
- */
+
 class WiFiClientNetworkSelectionChangedEvent final : public SerializableEvent<WiFiClientNetworkSelectionChangedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientNetworkSelectionChangedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -272,18 +176,7 @@ public:
 };
 
 /// <summary>Serializable event describing the known client-network candidate selected for connection.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members:
- * - BSSID (WiFi::MacAddress): 7 bytes [0 bytes dynamic allocation]
- * - Priority (uint16_t): 2 bytes [0 bytes dynamic allocation]
- * - RSSI (int32_t): 4 bytes [0 bytes dynamic allocation]
- * - Channel (uint8_t): 1 bytes [0 bytes dynamic allocation]
- * Total Memory: 44 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 class WiFiClientNetworkSelectedEvent final : public SerializableEvent<WiFiClientNetworkSelectedEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientNetworkSelectedEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -303,14 +196,7 @@ public:
 };
 
 /// <summary>Serializable event reporting that no configured known client network is currently available.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 24 bytes [0 bytes dynamic allocation]
- * Members: none (standalone empty object occupies 1 byte; an eligible empty base may be optimized to 0 bytes).
- * Total Memory: 24 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 class WiFiClientNoKnownNetworkAvailableEvent final : public SerializableEvent<WiFiClientNoKnownNetworkAvailableEvent> {
     ESPRESSIO_SERIALIZABLE_TYPE(WiFiClientNoKnownNetworkAvailableEvent)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)

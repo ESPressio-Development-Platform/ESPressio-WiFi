@@ -23,86 +23,32 @@ using WiFiVector = System::Memory::Vector<T, WiFiMemoryPolicy>;
 
 /// <summary>Application-level Wi-Fi operating mode.</summary>
 /// <remarks>APUntilClient prefers STA connectivity and exposes an AP only as fallback. Off is the canonical explicit radio-off mode; Disabled is retained for compatibility and has the same platform effect.</remarks>
-/**
- * ESPressio Memory Audit
- * Underlying storage: 1 bytes
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 enum class WiFiMode : uint8_t { Disabled, Client, AccessPoint, AccessPointClient, APUntilClient, Off };
 /// <summary>Runtime state of the client/station interface.</summary>
-/**
- * ESPressio Memory Audit
- * Underlying storage: 1 bytes
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 enum class ClientState : uint8_t { Disabled, Idle, Connecting, Connected, Reconnecting, Disconnecting, Disconnected, Failed };
 /// <summary>Runtime state of the local access point.</summary>
-/**
- * ESPressio Memory Audit
- * Underlying storage: 1 bytes
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 enum class AccessPointState : uint8_t { Disabled, Starting, Active, Failed };
 /// <summary>Runtime state of Wi-Fi scanning.</summary>
-/**
- * ESPressio Memory Audit
- * Underlying storage: 1 bytes
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 enum class ScanState : uint8_t { Idle, Scanning, Complete, Failed };
 /// <summary>Security classification reported for a scanned network.</summary>
-/**
- * ESPressio Memory Audit
- * Underlying storage: 1 bytes
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 enum class NetworkSecurity : uint8_t { Open, WEP, WPA, WPA2, WPA_WPA2, WPA3, WPA2_WPA3, Unknown };
 /// <summary>Selects dynamic DHCP or configured static addressing.</summary>
-/**
- * ESPressio Memory Audit
- * Underlying storage: 1 bytes
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 enum class AddressMode : uint8_t { DHCP, Static };
 /// <summary>Runtime state of automatic preferred-client-network selection.</summary>
-/**
- * ESPressio Memory Audit
- * Underlying storage: 1 bytes
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 enum class ClientNetworkSelectionState : uint8_t { Idle, Scanning, Selecting, Connecting, Connected, NoKnownNetworkAvailable, Exhausted };
 /// <summary>Runtime state of AP-until-client fallback behavior.</summary>
-/**
- * ESPressio Memory Audit
- * Underlying storage: 1 bytes
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 enum class APUntilClientState : uint8_t { Inactive, SeekingClient, FallbackAccessPoint, ClientConnected };
 
 /// <summary>Authoritative physical mode of the shared Wi-Fi radio.</summary>
-/**
- * ESPressio Memory Audit
- * Underlying storage: 1 bytes
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 enum class WiFiRadioMode : uint8_t {
     Off = 0,
     Station,
@@ -111,13 +57,7 @@ enum class WiFiRadioMode : uint8_t {
 };
 
 /// <summary>Reason associated with a low-level shared-radio state transition.</summary>
-/**
- * ESPressio Memory Audit
- * Underlying storage: 1 bytes
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 enum class WiFiRadioTransitionReason : uint8_t {
     Configuration = 0,
     ClientConnect,
@@ -129,14 +69,7 @@ enum class WiFiRadioTransitionReason : uint8_t {
 };
 
 /// <summary>Serializable IPv4 address value.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
- * Members: none (standalone empty object occupies 1 byte; an eligible empty base may be optimized to 0 bytes).
- * Total Memory: 1 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 struct IPv4Address final : Serializable::Serializable<IPv4Address> {
     ESPRESSIO_SERIALIZABLE_TYPE(IPv4Address)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -168,15 +101,7 @@ struct IPv4Address final : Serializable::Serializable<IPv4Address> {
 };
 
 /// <summary>Serializable six-octet MAC address value.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
- * Members:
- * - Octets (std::array<uint8_t,6>): 6 bytes [0 bytes dynamic allocation]
- * Total Memory: 7 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 struct MacAddress final : Serializable::Serializable<MacAddress> {
     ESPRESSIO_SERIALIZABLE_TYPE(MacAddress)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -189,21 +114,7 @@ struct MacAddress final : Serializable::Serializable<MacAddress> {
 
 /// <summary>Authoritative physical state of the shared 2.4 GHz Wi-Fi radio.</summary>
 /// <remarks>This intentionally differs from WiFiRuntimeState: infrastructure consumers such as ESP-NOW require native interface, channel, scan, and MAC facts rather than only application semantics.</remarks>
-/**
- * ESPressio Memory Audit
- * Members:
- * - Mode (WiFiRadioMode): 1 bytes [0 bytes dynamic allocation]
- * - StationInterfaceActive (bool): 1 bytes [0 bytes dynamic allocation]
- * - StationConnected (bool): 1 bytes [0 bytes dynamic allocation]
- * - AccessPointInterfaceActive (bool): 1 bytes [0 bytes dynamic allocation]
- * - Scanning (bool): 1 bytes [0 bytes dynamic allocation]
- * - Channel (uint8_t): 1 bytes [0 bytes dynamic allocation]
- * - StationMAC (MacAddress): 7 bytes [0 bytes dynamic allocation]
- * - AccessPointMAC (MacAddress): 7 bytes [0 bytes dynamic allocation]
- * Total Memory: 20 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 struct WiFiRadioState {
     WiFiRadioMode Mode = WiFiRadioMode::Off;
     bool StationInterfaceActive = false;
@@ -228,19 +139,7 @@ struct WiFiRadioState {
 };
 
 /// <summary>Serializable IP addressing configuration for an interface.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
- * Members:
- * - Address (IPv4Address): 1 bytes [0 bytes dynamic allocation]
- * - Gateway (IPv4Address): 1 bytes [0 bytes dynamic allocation]
- * - SubnetMask (IPv4Address): 1 bytes [0 bytes dynamic allocation]
- * - PrimaryDNS (IPv4Address): 1 bytes [0 bytes dynamic allocation]
- * - SecondaryDNS (IPv4Address): 1 bytes [0 bytes dynamic allocation]
- * Total Memory: 6 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
     ESPRESSIO_SERIALIZABLE_TYPE(NetworkAddress)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -260,21 +159,7 @@ struct NetworkAddress final : Serializable::Serializable<NetworkAddress> {
 };
 
 /// <summary>Serializable description of one network returned by Wi-Fi scanning.</summary>
-/**
- * ESPressio Memory Audit
- * Inherited Memory Total: 1 bytes [0 bytes dynamic allocation]
- * Members:
- * - SSID (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * - BSSID (MacAddress): 7 bytes [0 bytes dynamic allocation]
- * - RSSI (int32_t): 4 bytes [0 bytes dynamic allocation]
- * - Channel (uint8_t): 1 bytes [0 bytes dynamic allocation]
- * - Security (NetworkSecurity): 1 bytes [0 bytes dynamic allocation]
- * - Hidden (bool): 1 bytes [0 bytes dynamic allocation]
- * Total Memory: 44 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
- * End ESPressio Memory Audit
- */
+
 struct ScanResult final : Serializable::Serializable<ScanResult> {
     ESPRESSIO_SERIALIZABLE_TYPE(ScanResult)
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
@@ -296,20 +181,7 @@ struct ScanResult final : Serializable::Serializable<ScanResult> {
 };
 
 /// <summary>Resolved known-network candidate considered by automatic client selection.</summary>
-/**
- * ESPressio Memory Audit
- * Members:
- * - SSID (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * - BSSID (MacAddress): 7 bytes [0 bytes dynamic allocation]
- * - Priority (uint16_t): 2 bytes [0 bytes dynamic allocation]
- * - RSSI (int32_t): 4 bytes [0 bytes dynamic allocation]
- * - Channel (uint8_t): 1 bytes [0 bytes dynamic allocation]
- * - ProfileIndex (std::size_t): 4 bytes [0 bytes dynamic allocation]
- * Total Memory: 48 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
- * End ESPressio Memory Audit
- */
+
 struct ClientNetworkCandidate {
     WiFiString SSID;
     MacAddress BSSID{};
@@ -320,19 +192,7 @@ struct ClientNetworkCandidate {
 };
 
 /// <summary>Current state and selected candidate metadata for automatic client-network selection.</summary>
-/**
- * ESPressio Memory Audit
- * Members:
- * - State (ClientNetworkSelectionState): 1 bytes [0 bytes dynamic allocation]
- * - SelectedSSID (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * - SelectedPriority (uint16_t): 2 bytes [0 bytes dynamic allocation]
- * - SelectedProfileIndex (std::size_t): 4 bytes [0 bytes dynamic allocation]
- * - EligibleCandidateCount (std::size_t): 4 bytes [0 bytes dynamic allocation]
- * Total Memory: 40 bytes [SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
- * End ESPressio Memory Audit
- */
+
 struct ClientNetworkSelectionRuntimeState {
     ClientNetworkSelectionState State = ClientNetworkSelectionState::Idle;
     WiFiString SelectedSSID;
@@ -342,22 +202,7 @@ struct ClientNetworkSelectionRuntimeState {
 };
 
 /// <summary>Current client/station runtime state.</summary>
-/**
- * ESPressio Memory Audit
- * Members:
- * - State (ClientState): 1 bytes [0 bytes dynamic allocation]
- * - SSID (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * - BSSID (MacAddress): 7 bytes [0 bytes dynamic allocation]
- * - RSSI (int32_t): 4 bytes [0 bytes dynamic allocation]
- * - Channel (uint8_t): 1 bytes [0 bytes dynamic allocation]
- * - Network (NetworkAddress): 6 bytes [0 bytes dynamic allocation]
- * - ReconnectAttempt (uint32_t): 4 bytes [0 bytes dynamic allocation]
- * - Selection (ClientNetworkSelectionRuntimeState): 40 bytes [SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Total Memory: 92 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Selection: SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
- * End ESPressio Memory Audit
- */
+
 struct ClientRuntimeState {
     ClientState State=ClientState::Disabled;
     WiFiString SSID;
@@ -370,19 +215,7 @@ struct ClientRuntimeState {
 };
 
 /// <summary>Current access-point runtime state.</summary>
-/**
- * ESPressio Memory Audit
- * Members:
- * - State (AccessPointState): 1 bytes [0 bytes dynamic allocation]
- * - SSID (WiFiString): 24 bytes [_value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * - Channel (uint8_t): 1 bytes [0 bytes dynamic allocation]
- * - Network (NetworkAddress): 6 bytes [0 bytes dynamic allocation]
- * - ConnectedStations (uint16_t): 2 bytes [0 bytes dynamic allocation]
- * Total Memory: 40 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
- * End ESPressio Memory Audit
- */
+
 struct AccessPointRuntimeState {
     AccessPointState State=AccessPointState::Disabled;
     WiFiString SSID;
@@ -392,17 +225,7 @@ struct AccessPointRuntimeState {
 };
 
 /// <summary>Current AP-until-client fallback runtime state.</summary>
-/**
- * ESPressio Memory Audit
- * Members:
- * - State (APUntilClientState): 1 bytes [0 bytes dynamic allocation]
- * - FallbackAccessPointActive (bool): 1 bytes [0 bytes dynamic allocation]
- * - FallbackDeadlineMilliseconds (uint64_t): 8 bytes [0 bytes dynamic allocation]
- * - NextRetryMilliseconds (uint64_t): 8 bytes [0 bytes dynamic allocation]
- * Total Memory: 20 bytes [0 bytes dynamic allocation]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * End ESPressio Memory Audit
- */
+
 struct APUntilClientRuntimeState {
     APUntilClientState State = APUntilClientState::Inactive;
     bool FallbackAccessPointActive = false;
@@ -411,20 +234,7 @@ struct APUntilClientRuntimeState {
 };
 
 /// <summary>Aggregate application-level Wi-Fi runtime state and revision.</summary>
-/**
- * ESPressio Memory Audit
- * Members:
- * - Mode (WiFiMode): 1 bytes [0 bytes dynamic allocation]
- * - Client (ClientRuntimeState): 92 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Selection: SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * - AccessPoint (AccessPointRuntimeState): 40 bytes [SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * - APUntilClient (APUntilClientRuntimeState): 20 bytes [0 bytes dynamic allocation]
- * - Scan (ScanState): 1 bytes [0 bytes dynamic allocation]
- * - Revision (uint64_t): 8 bytes [0 bytes dynamic allocation]
- * Total Memory: 168 bytes [Client: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; Client: Selection: SelectedSSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO; AccessPoint: SSID: _value: Capacity + 1 bytes when capacity exceeds 15-byte SSO]
- * Basis: ESP32/Xtensa ILP32 reference ABI (4-byte pointers/size_t); ESPressio stateful allocators/deleters included; ABI-sensitive STL/platform internals are identified explicitly.
- * Confidence: medium; compile-time sizeof on the concrete target remains authoritative for ABI-sensitive/opaque members.
- * End ESPressio Memory Audit
- */
+
 struct WiFiRuntimeState {
     WiFiMode Mode=WiFiMode::Off;
     ClientRuntimeState Client{};
