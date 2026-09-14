@@ -1,75 +1,119 @@
-name: WiFi Tests
-on:
-  push:
-    branches: [main, 'feature/**', 'chore/**']
-  pull_request:
-    branches: [main]
+name: WiFi architecture contracts
+on: [push, pull_request]
+
 jobs:
-  host:
+  host-contracts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cmake -S . -B build
-      - run: cmake --build build --parallel
-      - run: ctest --test-dir build --output-on-failure
-  esp32:
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-System, ref: primitives_redesign, path: deps/ESPressio-System}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Observable, ref: primitives_redesign, path: deps/ESPressio-Observable}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Serializable, ref: primitives_redesign, path: deps/ESPressio-Serializable}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Units, ref: primitives_redesign, path: deps/ESPressio-Units}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Timing, ref: primitives_redesign, path: deps/ESPressio-Timing}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Task, ref: primitives_redesign, path: deps/ESPressio-Task}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Threads, ref: primitives_redesign, path: deps/ESPressio-Threads}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Primitive, ref: primitives_redesign, path: deps/ESPressio-Primitive}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Persistence, ref: primitives_redesign, path: deps/ESPressio-Persistence}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Security, ref: primitives_redesign, path: deps/ESPressio-Security}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Event, ref: primitives_redesign, path: deps/ESPressio-Event}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Command, ref: primitives_redesign, path: deps/ESPressio-Command}
+      - name: Reject predecessor WiFi family architecture
+        shell: bash
+        run: |
+          if grep -nE 'CommandRegistry|CommandNode|CommandContext|CommandResult' src/ESPressio_WiFiCommandHandler.hpp; then exit 1; fi
+          if grep -nE 'new[[:space:]]+WiFi.*Event|->Queue\(' src/ESPressio_WiFiEventBridge.hpp; then exit 1; fi
+      - name: Configure host contracts
+        run: cmake -S tests -B build -DESPRESSIO_DEPENDENCIES="$GITHUB_WORKSPACE/deps"
+      - name: Build host contracts
+        run: cmake --build build --parallel
+      - name: Run host contracts
+        run: ctest --test-dir build --output-on-failure
+
+  esp32-family-surface:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with: {path: project/ESPressio-WiFi}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-System, ref: primitives_redesign, path: project/dependencies/ESPressio-System}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Observable, ref: primitives_redesign, path: project/dependencies/ESPressio-Observable}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Serializable, ref: primitives_redesign, path: project/dependencies/ESPressio-Serializable}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Units, ref: primitives_redesign, path: project/dependencies/ESPressio-Units}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Timing, ref: primitives_redesign, path: project/dependencies/ESPressio-Timing}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Task, ref: primitives_redesign, path: project/dependencies/ESPressio-Task}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Threads, ref: primitives_redesign, path: project/dependencies/ESPressio-Threads}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Primitive, ref: primitives_redesign, path: project/dependencies/ESPressio-Primitive}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Persistence, ref: primitives_redesign, path: project/dependencies/ESPressio-Persistence}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Security, ref: primitives_redesign, path: project/dependencies/ESPressio-Security}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Event, ref: primitives_redesign, path: project/dependencies/ESPressio-Event}
+      - uses: actions/checkout@v4
+        with: {repository: ESPressio-Development-Platform/ESPressio-Command, ref: primitives_redesign, path: project/dependencies/ESPressio-Command}
       - uses: actions/setup-python@v5
         with: {python-version: '3.x'}
       - run: pip install platformio
-      - name: Create integration consumer
+      - name: Compile final WiFi Event and Command family surface
+        shell: bash
         run: |
-          mkdir -p project/consumer/src
-          cat > project/consumer/network_include.py <<'EOF'
-          Import("env")
-          framework = env.PioPlatform().get_package_dir("framework-arduinoespressif32")
-          env.Append(CPPPATH=[framework + "/libraries/Network/src"])
-          EOF
-          cat > project/consumer/platformio.ini <<'EOF'
+          mkdir -p project/compile/src
+          cat > project/compile/platformio.ini <<'INI'
           [env:esp32]
           platform = https://github.com/pioarduino/platform-espressif32/releases/download/55.03.311/platform-espressif32.zip
           board = esp32dev
           framework = arduino
-          extra_scripts = pre:network_include.py
           build_flags = -std=gnu++17 -fno-rtti -DESPRESSIO_SERIALIZATION_PREFER_PSRAM
           build_unflags = -std=gnu++11 -frtti
           lib_ldf_mode = deep+
           lib_deps =
+              ../dependencies/ESPressio-System
+              ../dependencies/ESPressio-Observable
+              ../dependencies/ESPressio-Serializable
+              ../dependencies/ESPressio-Units
+              ../dependencies/ESPressio-Timing
+              ../dependencies/ESPressio-Task
+              ../dependencies/ESPressio-Threads
+              ../dependencies/ESPressio-Primitive
+              ../dependencies/ESPressio-Persistence
+              ../dependencies/ESPressio-Security
+              ../dependencies/ESPressio-Event
+              ../dependencies/ESPressio-Command
               ../ESPressio-WiFi
-              https://github.com/ESPressio-Development-Platform/ESPressio-System.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Observable.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Serializable.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Units.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Timing.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Task.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Threads.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Persistence.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Security.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Event.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-Command.git#primitives_redesign
-              https://github.com/ESPressio-Development-Platform/ESPressio-ESP32.git#primitives_redesign
-          EOF
-          cat > project/consumer/src/main.cpp <<'EOF'
+          INI
+          cat > project/compile/src/main.cpp <<'CPP'
           #include <Arduino.h>
-          #include <Network.h>
-          #include <WiFi.h>
-          #include <ESPressio_ESP32.hpp>
-          #include <ESPressio_WiFiPlatform.hpp>
-          #include <ESPressio_WiFiWorker.hpp>
-          #include <ESPressio_WiFiPersistence.hpp>
-          #include <ESPressio_WiFiPersistenceSecurity.hpp>
-          #include <ESPressio_WiFiEventBridge.hpp>
           #include <ESPressio_WiFiCommandHandler.hpp>
+          #include <ESPressio_WiFiEventBridge.hpp>
           using namespace ESPressio;
-          WiFi::WiFiPlatform platform;
-          WiFi::WiFiManager manager(platform);
-          WiFi::WiFiWorker worker(manager);
-          WiFi::WiFiCommandHandler commands;
-          Event::WiFiEventBridge events;
-          void setup(){ ESP32Platform::InstallSystemProviders(); WiFi::WiFiConfiguration config; config.Mode=WiFi::WiFiMode::APUntilClient; config.AccessPoint.SSID="ESPressio-Test"; config.Client.Enabled=true; WiFi::ClientNetworkProfile preferred; preferred.SSID="Preferred"; preferred.Password="test-passphrase"; preferred.Priority=200; config.Client.Networks.push_back(std::move(preferred)); (void)manager.Configure(std::move(config)); (void)commands.Initialize(Command::CommandRegistry::GetInstance(),manager); (void)events.Initialize(manager); (void)worker.Initialize(); (void)worker.Start(); }
-          void loop(){delay(1000);}
-          EOF
-      - run: pio run -d project/consumer
+          static_assert(Serializable::IsBoundedSerializable<Event::WiFiScanCompletedEvent>);
+          static_assert(Serializable::IsBoundedSerializable<WiFi::WiFiConfigureCommand>);
+          void setup() {
+              Primitive::TypeDirectory<13> events;
+              Primitive::TypeDirectory<13> commands;
+              (void)Event::RegisterWiFiEventTypes(events);
+              (void)WiFi::RegisterWiFiCommandTypes(commands);
+          }
+          void loop() {}
+          CPP
+          pio run -d project/compile
