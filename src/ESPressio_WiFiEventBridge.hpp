@@ -1,89 +1,89 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
+
 #include "ESPressio_IWiFiObserver.hpp"
 #include "ESPressio_WiFi.hpp"
 #include "ESPressio_WiFiEvents.hpp"
 
 namespace ESPressio::Event {
 
-/// <summary>Bridges Wi-Fi observer callbacks into queued ESPressio Event instances.</summary>
-
+/// Bridges caller-owned WiFiManager observer notifications into the final typed
+/// Event runtime. The bridge owns only its WiFi observer registration and a
+/// bounded diagnostic drop counter: Event owns occurrence allocation, admission,
+/// queueing and dispatch lifecycle.
 class WiFiEventBridge final : public WiFi::IWiFiObserver {
 public:
-    /// <summary>Registers the bridge with a WiFiManager.</summary>
-    /// <returns><c>true</c> when the bridge is registered or was already initialized.</returns>
     bool Initialize(WiFi::WiFiManager& manager) {
-        if (_initialized) return true;
+        if (_observer) return true;
         _observer = manager.RegisterObserver(this);
-        _initialized = static_cast<bool>(_observer);
-        return _initialized;
+        return static_cast<bool>(_observer);
     }
 
-    /// <summary>Unregisters the bridge and releases its observer handle.</summary>
-    void Shutdown() { _observer.reset(); _initialized = false; }
-    /// <summary>Indicates whether the bridge currently holds an active Wi-Fi observer registration.</summary>
-    bool IsInitialized() const noexcept { return _initialized; }
+    void Shutdown() noexcept { _observer.reset(); }
+    bool IsInitialized() const noexcept { return static_cast<bool>(_observer); }
+    std::uint64_t UnavailableDispatches() const noexcept {
+        return _unavailableDispatches.load(std::memory_order_relaxed);
+    }
 
-    /// <inheritdoc/>
     void OnWiFiModeChanged(WiFi::WiFiMode before, WiFi::WiFiMode after) override {
-        (new WiFiModeChangedEvent(before, after))->Queue();
+        Emit<WiFiModeChangedEvent>(before, after);
     }
-    /// <inheritdoc/>
     void OnClientStateChanged(const WiFi::ClientRuntimeState& before, const WiFi::ClientRuntimeState& after) override {
-        (new WiFiClientStateChangedEvent(before, after))->Queue();
+        Emit<WiFiClientStateChangedEvent>(before, after);
     }
-    /// <inheritdoc/>
     void OnAccessPointStateChanged(const WiFi::AccessPointRuntimeState& before, const WiFi::AccessPointRuntimeState& after) override {
-        (new WiFiAccessPointStateChangedEvent(before, after))->Queue();
+        Emit<WiFiAccessPointStateChangedEvent>(before, after);
     }
-    /// <inheritdoc/>
     void OnAPUntilClientStateChanged(
         const WiFi::APUntilClientRuntimeState& before,
         const WiFi::APUntilClientRuntimeState& after
     ) override {
-        (new WiFiAPUntilClientStateChangedEvent(before, after))->Queue();
+        Emit<WiFiAPUntilClientStateChangedEvent>(before, after);
     }
-    /// <inheritdoc/>
     void OnScanStateChanged(WiFi::ScanState before, WiFi::ScanState after) override {
-        (new WiFiScanStateChangedEvent(before, after))->Queue();
+        Emit<WiFiScanStateChangedEvent>(before, after);
     }
-    /// <inheritdoc/>
     void OnScanCompleted(const WiFi::WiFiVector<WiFi::ScanResult>& results) override {
-        (new WiFiScanCompletedEvent(results))->Queue();
+        Emit<WiFiScanCompletedEvent>(results);
     }
-    /// <inheritdoc/>
     void OnAccessPointStationConnected(const WiFi::MacAddress& station) override {
-        (new WiFiAccessPointStationConnectedEvent(station))->Queue();
+        Emit<WiFiAccessPointStationConnectedEvent>(station);
     }
-    /// <inheritdoc/>
     void OnAccessPointStationDisconnected(const WiFi::MacAddress& station) override {
-        (new WiFiAccessPointStationDisconnectedEvent(station))->Queue();
+        Emit<WiFiAccessPointStationDisconnectedEvent>(station);
     }
-    /// <inheritdoc/>
     void OnClientIPAddressAcquired(const WiFi::NetworkAddress& network) override {
-        (new WiFiClientIPAddressAcquiredEvent(network))->Queue();
+        Emit<WiFiClientIPAddressAcquiredEvent>(network);
     }
-    /// <inheritdoc/>
-    void OnClientIPAddressLost() override { (new WiFiClientIPAddressLostEvent())->Queue(); }
-    /// <inheritdoc/>
+    void OnClientIPAddressLost() override { Emit<WiFiClientIPAddressLostEvent>(); }
     void OnClientNetworkSelectionChanged(
         const WiFi::ClientNetworkSelectionRuntimeState& before,
         const WiFi::ClientNetworkSelectionRuntimeState& after
     ) override {
-        (new WiFiClientNetworkSelectionChangedEvent(before, after))->Queue();
+        Emit<WiFiClientNetworkSelectionChangedEvent>(before, after);
     }
-    /// <inheritdoc/>
     void OnClientNetworkSelected(const WiFi::ClientNetworkCandidate& selected) override {
-        (new WiFiClientNetworkSelectedEvent(selected))->Queue();
+        Emit<WiFiClientNetworkSelectedEvent>(selected);
     }
-    /// <inheritdoc/>
     void OnClientNoKnownNetworkAvailable() override {
-        (new WiFiClientNoKnownNetworkAvailableEvent())->Queue();
+        Emit<WiFiClientNoKnownNetworkAvailableEvent>();
     }
 
 private:
+    template<class TEvent, class... Args>
+    void Emit(Args&&... args) noexcept {
+        try {
+            if (!TEvent::TryDispatch(std::forward<Args>(args)...))
+                _unavailableDispatches.fetch_add(1, std::memory_order_relaxed);
+        } catch (...) {
+            _unavailableDispatches.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+
     Observable::ObserverHandlePtr _observer;
-    bool _initialized = false;
+    std::atomic<std::uint64_t> _unavailableDispatches{0};
 };
 
 } // namespace ESPressio::Event
