@@ -1,165 +1,445 @@
 #pragma once
 
-#include <algorithm>
-#include <cstdio>
-#include <sstream>
-#include <string>
-#include <ESPressio_Command.hpp>
+#include <cstddef>
+#include <cstdint>
+#include <string_view>
+#include <utility>
+
+#include <ESPressio_SerializableCommand.hpp>
+#include <ESPressio_CommandRuntime.hpp>
+#include <ESPressio_TypeDirectory.hpp>
+
 #include "ESPressio_WiFi.hpp"
 
 namespace ESPressio::WiFi {
 
+/// Finite bounds for the dynamic/admin Command projection. WiFiManager retains
+/// its existing WiFi-owned storage semantics; these limits bound Primitive input
+/// before family decode/construction.
+inline constexpr std::size_t WiFiAdministrativeSSIDMaximumBytes = 32;
+inline constexpr std::size_t WiFiAdministrativePasswordMaximumBytes = 64;
+inline constexpr std::size_t WiFiAdministrativeHostnameMaximumBytes = 64;
+inline constexpr std::size_t WiFiAdministrativeMaximumNetworks = 8;
 
-class WiFiCommandHandler {
+struct WiFiAdministrativeClientNetworkProfile final
+    : Serializable::Serializable<WiFiAdministrativeClientNetworkProfile> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiAdministrativeClientNetworkProfile)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
 public:
-    bool Initialize(Command::CommandRegistry& registry, WiFiManager& manager) {
-        if (_registration.Active()) return true;
-        _manager = &manager;
-        _registration = registry.RegisterCommand("wifi");
-        if (!_registration.Active()) return false;
+    Serializable::BoundedString<WiFiAdministrativeSSIDMaximumBytes> SSID;
+    Serializable::BoundedString<WiFiAdministrativePasswordMaximumBytes> Password;
+    std::uint16_t Priority = 100;
+    bool Enabled = true;
+    AddressMode Addressing = AddressMode::DHCP;
+    NetworkAddress StaticNetwork{};
 
-        auto& root = registry.Command("wifi").Description("ESPressio WiFi control and diagnostics");
-        root.Command("status").Description("Show composite AP/client/scan/fallback WiFi state")
-            .OnExecute([this](const Command::CommandContext&) { return Status(); });
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("ssid", SSID),
+        ESPRESSIO_PROPERTY_SENSITIVE("password", Password),
+        ESPRESSIO_PROPERTY("priority", Priority),
+        ESPRESSIO_PROPERTY("enabled", Enabled),
+        ESPRESSIO_PROPERTY("addressing", Addressing),
+        ESPRESSIO_PROPERTY("staticNetwork", StaticNetwork)
+    )
+};
 
-        auto& mode = root.Command("mode").Description("Set WiFi operating mode; 'off' powers the WiFi radio down completely");
-        mode.Parameter("mode", Command::ParameterKind::Enumeration)
-            .OneOf({"off","disabled","client","ap","ap-client","ap-until-client"});
-        mode.OnExecute([this](const Command::CommandContext& context) {
-            auto config = _manager->Configuration();
-            const auto text = context.Get<std::string>("mode");
-            if (text == "off") config.Mode = WiFiMode::Off;
-            else if (text == "disabled") config.Mode = WiFiMode::Disabled;
-            else if (text == "client") config.Mode = WiFiMode::Client;
-            else if (text == "ap") config.Mode = WiFiMode::AccessPoint;
-            else if (text == "ap-client") config.Mode = WiFiMode::AccessPointClient;
-            else config.Mode = WiFiMode::APUntilClient;
-            return Result(_manager->Configure(std::move(config)));
-        });
+struct WiFiAdministrativeClientConfiguration final
+    : Serializable::Serializable<WiFiAdministrativeClientConfiguration> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiAdministrativeClientConfiguration)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+public:
+    bool Enabled = false;
+    Serializable::BoundedString<WiFiAdministrativeSSIDMaximumBytes> SSID;
+    Serializable::BoundedString<WiFiAdministrativePasswordMaximumBytes> Password;
+    AddressMode Addressing = AddressMode::DHCP;
+    NetworkAddress StaticNetwork{};
+    Serializable::BoundedVector<
+        WiFiAdministrativeClientNetworkProfile,
+        WiFiAdministrativeMaximumNetworks
+    > Networks;
+    ClientNetworkSelectionConfiguration Selection{};
 
-        auto& scan = root.Command("scan").Description("WiFi network scanning");
-        scan.OnExecute([this](const Command::CommandContext&) { return Result(_manager->Scan()); });
-        scan.Command("results").Description("Show the most recent completed scan")
-            .OnExecute([this](const Command::CommandContext&) { return ScanResults(); });
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("enabled", Enabled),
+        ESPRESSIO_PROPERTY("ssid", SSID),
+        ESPRESSIO_PROPERTY_SENSITIVE("password", Password),
+        ESPRESSIO_PROPERTY("addressing", Addressing),
+        ESPRESSIO_PROPERTY("staticNetwork", StaticNetwork),
+        ESPRESSIO_PROPERTY("networks", Networks),
+        ESPRESSIO_PROPERTY("selection", Selection)
+    )
+};
 
-        ConfigureClientCommands(root.Command("client").Description("Station/client controls"));
-        ConfigureAccessPointCommands(root.Command("ap").Description("Access Point controls"));
-        ConfigureAPUntilClientCommands(root.Command("ap-until-client").Description("Conditional AP fallback controls"));
-        ConfigureConfigurationCommands(root.Command("config").Description("Safe WiFi configuration controls"));
-        return true;
+struct WiFiAdministrativeAccessPointConfiguration final
+    : Serializable::Serializable<WiFiAdministrativeAccessPointConfiguration> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiAdministrativeAccessPointConfiguration)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+public:
+    bool Enabled = true;
+    Serializable::BoundedString<WiFiAdministrativeSSIDMaximumBytes> SSID;
+    Serializable::BoundedString<WiFiAdministrativePasswordMaximumBytes> Password;
+    std::uint8_t Channel = 1;
+    bool Hidden = false;
+    std::uint8_t MaximumClients = 4;
+    NetworkAddress Network{};
+    DHCPServerConfiguration DHCP{};
+
+    WiFiAdministrativeAccessPointConfiguration() noexcept {
+        Network.Address = IPv4Address(192,168,4,1);
+        Network.Gateway = IPv4Address(192,168,4,1);
+        Network.SubnetMask = IPv4Address(255,255,255,0);
     }
 
-    void Shutdown() { _registration.Reset(); _manager = nullptr; }
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("enabled", Enabled),
+        ESPRESSIO_PROPERTY("ssid", SSID),
+        ESPRESSIO_PROPERTY_SENSITIVE("password", Password),
+        ESPRESSIO_PROPERTY("channel", Channel),
+        ESPRESSIO_PROPERTY("hidden", Hidden),
+        ESPRESSIO_PROPERTY("maximumClients", MaximumClients),
+        ESPRESSIO_PROPERTY("network", Network),
+        ESPRESSIO_PROPERTY("dhcp", DHCP)
+    )
+};
+
+struct WiFiAdministrativeConfiguration final
+    : Serializable::Serializable<WiFiAdministrativeConfiguration> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiAdministrativeConfiguration)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+public:
+    WiFiMode Mode = WiFiMode::AccessPoint;
+    Serializable::BoundedString<WiFiAdministrativeHostnameMaximumBytes> Hostname;
+    WiFiAdministrativeClientConfiguration Client{};
+    WiFiAdministrativeAccessPointConfiguration AccessPoint{};
+    ReconnectPolicy Reconnect{};
+    APUntilClientConfiguration APUntilClient{};
+    std::int8_t TxPowerDbm = 20;
+    bool PowerSave = false;
+
+    WiFiAdministrativeConfiguration() noexcept { (void)Hostname.assign("espressio"); }
+
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("mode", Mode),
+        ESPRESSIO_PROPERTY("hostname", Hostname),
+        ESPRESSIO_PROPERTY("client", Client),
+        ESPRESSIO_PROPERTY("accessPoint", AccessPoint),
+        ESPRESSIO_PROPERTY("reconnect", Reconnect),
+        ESPRESSIO_PROPERTY("apUntilClient", APUntilClient),
+        ESPRESSIO_PROPERTY("txPowerDbm", TxPowerDbm),
+        ESPRESSIO_PROPERTY("powerSave", PowerSave)
+    )
+};
+
+enum class WiFiCommandOutcome : std::uint8_t {
+    Success,
+    InvalidConfiguration,
+    NotSupported,
+    Busy,
+    PlatformError,
+    PersistenceNotConfigured,
+    PersistenceNotFound,
+    PersistenceStorageError,
+    PersistenceSerializationError,
+    PersistenceProtectionError,
+    NetworkNotFound
+};
+
+struct WiFiCommandResponse final : Serializable::Serializable<WiFiCommandResponse> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiCommandResponse)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+public:
+    WiFiCommandOutcome Outcome = WiFiCommandOutcome::Success;
+    constexpr bool Succeeded() const noexcept { return Outcome == WiFiCommandOutcome::Success; }
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("outcome", Outcome))
+};
+
+namespace WiFiCommandDetail {
+
+template<std::size_t N>
+inline WiFiString ToNativeString(const Serializable::BoundedString<N>& source) {
+    WiFiString result;
+    result.assign(source.data(), source.size());
+    return result;
+}
+
+inline ClientNetworkProfile ToNative(const WiFiAdministrativeClientNetworkProfile& source) {
+    ClientNetworkProfile result;
+    result.SSID = ToNativeString(source.SSID);
+    result.Password = ToNativeString(source.Password);
+    result.Priority = source.Priority;
+    result.Enabled = source.Enabled;
+    result.Addressing = source.Addressing;
+    result.StaticNetwork = source.StaticNetwork;
+    return result;
+}
+
+inline WiFiConfiguration ToNative(const WiFiAdministrativeConfiguration& source) {
+    WiFiConfiguration result;
+    result.Mode = source.Mode;
+    result.Hostname = ToNativeString(source.Hostname);
+    result.Client.Enabled = source.Client.Enabled;
+    result.Client.SSID = ToNativeString(source.Client.SSID);
+    result.Client.Password = ToNativeString(source.Client.Password);
+    result.Client.Addressing = source.Client.Addressing;
+    result.Client.StaticNetwork = source.Client.StaticNetwork;
+    result.Client.Selection = source.Client.Selection;
+    result.Client.Networks.clear();
+    result.Client.Networks.reserve(source.Client.Networks.size());
+    for (const auto& profile : source.Client.Networks)
+        result.Client.Networks.push_back(ToNative(profile));
+    result.AccessPoint.Enabled = source.AccessPoint.Enabled;
+    result.AccessPoint.SSID = ToNativeString(source.AccessPoint.SSID);
+    result.AccessPoint.Password = ToNativeString(source.AccessPoint.Password);
+    result.AccessPoint.Channel = source.AccessPoint.Channel;
+    result.AccessPoint.Hidden = source.AccessPoint.Hidden;
+    result.AccessPoint.MaximumClients = source.AccessPoint.MaximumClients;
+    result.AccessPoint.Network = source.AccessPoint.Network;
+    result.AccessPoint.DHCP = source.AccessPoint.DHCP;
+    result.Reconnect = source.Reconnect;
+    result.APUntilClient = source.APUntilClient;
+    result.TxPowerDbm = source.TxPowerDbm;
+    result.PowerSave = source.PowerSave;
+    return result;
+}
+
+inline WiFiCommandResponse FromStatus(WiFiStatus status) noexcept {
+    switch (status) {
+        case WiFiStatus::Success: return {WiFiCommandOutcome::Success};
+        case WiFiStatus::InvalidConfiguration: return {WiFiCommandOutcome::InvalidConfiguration};
+        case WiFiStatus::NotSupported: return {WiFiCommandOutcome::NotSupported};
+        case WiFiStatus::Busy: return {WiFiCommandOutcome::Busy};
+        case WiFiStatus::PlatformError: return {WiFiCommandOutcome::PlatformError};
+    }
+    return {WiFiCommandOutcome::PlatformError};
+}
+
+inline WiFiCommandResponse FromStoreStatus(const WiFiConfigurationStoreResult& result) noexcept {
+    switch (result.Status) {
+        case WiFiConfigurationStoreStatus::Success: return {WiFiCommandOutcome::Success};
+        case WiFiConfigurationStoreStatus::NotConfigured: return {WiFiCommandOutcome::PersistenceNotConfigured};
+        case WiFiConfigurationStoreStatus::NotFound: return {WiFiCommandOutcome::PersistenceNotFound};
+        case WiFiConfigurationStoreStatus::StorageError: return {WiFiCommandOutcome::PersistenceStorageError};
+        case WiFiConfigurationStoreStatus::SerializationError: return {WiFiCommandOutcome::PersistenceSerializationError};
+        case WiFiConfigurationStoreStatus::ProtectionError: return {WiFiCommandOutcome::PersistenceProtectionError};
+    }
+    return {WiFiCommandOutcome::PersistenceStorageError};
+}
+
+} // namespace WiFiCommandDetail
+
+// Command TypeIds are explicit stable WiFi-owned assignments, independent of
+// CanonicalName. Every operation is response-bearing because the predecessor
+// administrative contract returned an operation result; generic dynamic tools
+// therefore see RequesterRequired rather than silently discarding status.
+#define ESPRESSIO_WIFI_COMMAND_METADATA(IdValue, NameValue) \
+    static constexpr Command::CommandTypeId TypeId{IdValue}; \
+    static constexpr std::string_view CanonicalName = NameValue; \
+    static constexpr std::size_t MaximumLiveInstances = 2; \
+    static constexpr std::size_t MaximumPendingExecutions = 1; \
+    static constexpr std::size_t MaximumPendingResponses = 2; \
+    using ExecutionAdmissionPolicy = Command::RequiredExecution
+
+class WiFiConfigureCommand final
+    : public Command::SerializableCommand<WiFiConfigureCommand, WiFiCommandResponse> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiConfigureCommand)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+public:
+    ESPRESSIO_WIFI_COMMAND_METADATA(0x5749464900020001ULL, "ESPressio.WiFi.Configure");
+    WiFiAdministrativeConfiguration Configuration{};
+    WiFiConfigureCommand() = default;
+    explicit WiFiConfigureCommand(WiFiAdministrativeConfiguration configuration) noexcept
+        : Configuration(std::move(configuration)) {}
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("configuration", Configuration))
+};
+
+#define ESPRESSIO_WIFI_EMPTY_COMMAND(TypeName, IdValue, Canonical) \
+class TypeName final : public Command::SerializableCommand<TypeName, WiFiCommandResponse> { \
+    ESPRESSIO_SERIALIZABLE_TYPE(TypeName) \
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1) \
+public: \
+    ESPRESSIO_WIFI_COMMAND_METADATA(IdValue, Canonical); \
+    ESPRESSIO_SERIALIZABLE_PROPERTIES() \
+}
+
+ESPRESSIO_WIFI_EMPTY_COMMAND(WiFiDisableCommand, 0x5749464900020002ULL, "ESPressio.WiFi.Disable");
+ESPRESSIO_WIFI_EMPTY_COMMAND(WiFiConnectClientCommand, 0x5749464900020003ULL, "ESPressio.WiFi.Client.Connect");
+ESPRESSIO_WIFI_EMPTY_COMMAND(WiFiDisconnectClientCommand, 0x5749464900020004ULL, "ESPressio.WiFi.Client.Disconnect");
+ESPRESSIO_WIFI_EMPTY_COMMAND(WiFiStartAccessPointCommand, 0x5749464900020005ULL, "ESPressio.WiFi.AccessPoint.Start");
+ESPRESSIO_WIFI_EMPTY_COMMAND(WiFiStopAccessPointCommand, 0x5749464900020006ULL, "ESPressio.WiFi.AccessPoint.Stop");
+ESPRESSIO_WIFI_EMPTY_COMMAND(WiFiScanCommand, 0x5749464900020007ULL, "ESPressio.WiFi.Scan");
+ESPRESSIO_WIFI_EMPTY_COMMAND(WiFiRetryKnownNetworksCommand, 0x5749464900020008ULL, "ESPressio.WiFi.Client.RetryKnownNetworks");
+ESPRESSIO_WIFI_EMPTY_COMMAND(WiFiSaveConfigurationCommand, 0x574946490002000CULL, "ESPressio.WiFi.Configuration.Save");
+
+#undef ESPRESSIO_WIFI_EMPTY_COMMAND
+
+class WiFiUpsertClientNetworkCommand final
+    : public Command::SerializableCommand<WiFiUpsertClientNetworkCommand, WiFiCommandResponse> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiUpsertClientNetworkCommand)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+public:
+    ESPRESSIO_WIFI_COMMAND_METADATA(0x5749464900020009ULL, "ESPressio.WiFi.Client.Network.Upsert");
+    WiFiAdministrativeClientNetworkProfile Profile{};
+    WiFiUpsertClientNetworkCommand() = default;
+    explicit WiFiUpsertClientNetworkCommand(WiFiAdministrativeClientNetworkProfile profile) noexcept
+        : Profile(std::move(profile)) {}
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("profile", Profile))
+};
+
+class WiFiRemoveClientNetworkCommand final
+    : public Command::SerializableCommand<WiFiRemoveClientNetworkCommand, WiFiCommandResponse> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiRemoveClientNetworkCommand)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+public:
+    ESPRESSIO_WIFI_COMMAND_METADATA(0x574946490002000AULL, "ESPressio.WiFi.Client.Network.Remove");
+    Serializable::BoundedString<WiFiAdministrativeSSIDMaximumBytes> SSID;
+    WiFiRemoveClientNetworkCommand() = default;
+    explicit WiFiRemoveClientNetworkCommand(Serializable::BoundedString<WiFiAdministrativeSSIDMaximumBytes> ssid) noexcept
+        : SSID(std::move(ssid)) {}
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("ssid", SSID))
+};
+
+class WiFiSetClientNetworkPriorityCommand final
+    : public Command::SerializableCommand<WiFiSetClientNetworkPriorityCommand, WiFiCommandResponse> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiSetClientNetworkPriorityCommand)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+public:
+    ESPRESSIO_WIFI_COMMAND_METADATA(0x574946490002000BULL, "ESPressio.WiFi.Client.Network.Priority");
+    Serializable::BoundedString<WiFiAdministrativeSSIDMaximumBytes> SSID;
+    std::uint16_t Priority = 100;
+    WiFiSetClientNetworkPriorityCommand() = default;
+    WiFiSetClientNetworkPriorityCommand(
+        Serializable::BoundedString<WiFiAdministrativeSSIDMaximumBytes> ssid,
+        std::uint16_t priority
+    ) noexcept : SSID(std::move(ssid)), Priority(priority) {}
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(
+        ESPRESSIO_PROPERTY("ssid", SSID), ESPRESSIO_PROPERTY("priority", Priority)
+    )
+};
+
+class WiFiLoadConfigurationCommand final
+    : public Command::SerializableCommand<WiFiLoadConfigurationCommand, WiFiCommandResponse> {
+    ESPRESSIO_SERIALIZABLE_TYPE(WiFiLoadConfigurationCommand)
+    ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
+public:
+    ESPRESSIO_WIFI_COMMAND_METADATA(0x574946490002000DULL, "ESPressio.WiFi.Configuration.Load");
+    bool Apply = true;
+    WiFiLoadConfigurationCommand() = default;
+    explicit WiFiLoadConfigurationCommand(bool apply) noexcept : Apply(apply) {}
+    ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("apply", Apply))
+};
+
+#undef ESPRESSIO_WIFI_COMMAND_METADATA
+
+/// Final WiFi-to-Command composition seam. It binds a fixed typed Command set to
+/// one caller-owned Command::Runtime and delegates all WiFi behavior to the
+/// supplied WiFiManager. It owns no Command queue, registry, retry engine,
+/// response router, execution worker or transport state.
+class WiFiCommandHandler final {
+public:
+    Command::CommandRuntimeStatus Bind(Command::Runtime& runtime, WiFiManager& manager) {
+        if (_runtime == &runtime && _manager == &manager) return Command::CommandRuntimeStatus::Success;
+        if (_runtime != nullptr || _manager != nullptr) return Command::CommandRuntimeStatus::Frozen;
+        _manager = &manager;
+
+#define ESPRESSIO_WIFI_BIND(Type, Method) \
+    do { \
+        const auto status = runtime.template BindHandler<Type>(*this, &WiFiCommandHandler::Method); \
+        if (status != Command::CommandRuntimeStatus::Success) { _manager = nullptr; return status; } \
+    } while (false)
+        ESPRESSIO_WIFI_BIND(WiFiConfigureCommand, HandleConfigure);
+        ESPRESSIO_WIFI_BIND(WiFiDisableCommand, HandleDisable);
+        ESPRESSIO_WIFI_BIND(WiFiConnectClientCommand, HandleConnectClient);
+        ESPRESSIO_WIFI_BIND(WiFiDisconnectClientCommand, HandleDisconnectClient);
+        ESPRESSIO_WIFI_BIND(WiFiStartAccessPointCommand, HandleStartAccessPoint);
+        ESPRESSIO_WIFI_BIND(WiFiStopAccessPointCommand, HandleStopAccessPoint);
+        ESPRESSIO_WIFI_BIND(WiFiScanCommand, HandleScan);
+        ESPRESSIO_WIFI_BIND(WiFiRetryKnownNetworksCommand, HandleRetryKnownNetworks);
+        ESPRESSIO_WIFI_BIND(WiFiUpsertClientNetworkCommand, HandleUpsertClientNetwork);
+        ESPRESSIO_WIFI_BIND(WiFiRemoveClientNetworkCommand, HandleRemoveClientNetwork);
+        ESPRESSIO_WIFI_BIND(WiFiSetClientNetworkPriorityCommand, HandleSetClientNetworkPriority);
+        ESPRESSIO_WIFI_BIND(WiFiSaveConfigurationCommand, HandleSaveConfiguration);
+        ESPRESSIO_WIFI_BIND(WiFiLoadConfigurationCommand, HandleLoadConfiguration);
+#undef ESPRESSIO_WIFI_BIND
+
+        _runtime = &runtime;
+        return Command::CommandRuntimeStatus::Success;
+    }
+
+    bool IsBound() const noexcept { return _runtime != nullptr && _manager != nullptr; }
 
 private:
-    void ConfigureClientCommands(Command::CommandNode& client) {
-        client.Command("status").OnExecute([this](const Command::CommandContext&) {
-            const auto state = _manager->State().Client;
-            std::ostringstream out;
-            out << "state=" << ClientStateName(state.State) << " ssid=" << state.SSID
-                << " rssi=" << state.RSSI << " channel=" << static_cast<unsigned>(state.Channel)
-                << " ip=" << state.Network.Address.ToString() << " reconnect-attempt=" << state.ReconnectAttempt
-                << " selection=" << SelectionStateName(state.Selection.State)
-                << " candidates=" << state.Selection.EligibleCandidateCount;
-            if (!state.Selection.SelectedSSID.empty()) out << " selected=" << state.Selection.SelectedSSID << " priority=" << state.Selection.SelectedPriority;
-            return Command::CommandResult::Ok(out.str());
-        });
-        client.Command("connect").OnExecute([this](const Command::CommandContext&) { return Result(_manager->ConnectClient()); });
-        client.Command("disconnect").OnExecute([this](const Command::CommandContext&) { return Result(_manager->DisconnectClient()); });
-
-        auto& autoSelect = client.Command("auto-select");
-        autoSelect.Parameter<bool>("enabled");
-        autoSelect.OnExecute([this](const Command::CommandContext& context) {
-            auto config = _manager->Configuration(); config.Client.Selection.AutomaticSelection = context.Get<bool>("enabled");
-            return Result(_manager->Configure(std::move(config)));
-        });
-
-        auto& networks = client.Command("networks").Description("Manage remembered client networks");
-        networks.Command("list").OnExecute([this](const Command::CommandContext&) { return RememberedNetworks(); });
-
-        auto& add = networks.Command("add").Description("Add or update a remembered network; password is never returned");
-        add.Parameter<std::string>("ssid"); add.Parameter<std::string>("password"); add.Parameter<unsigned int>("priority").Range(0,65535);
-        add.OnExecute([this](const Command::CommandContext& context) {
-            ClientNetworkProfile profile; profile.SSID=context.Get<std::string>("ssid"); profile.Password=context.Get<std::string>("password"); profile.Priority=static_cast<uint16_t>(context.Get<unsigned int>("priority"));
-            return _manager->AddOrUpdateClientNetwork(std::move(profile)) ? Command::CommandResult::Ok("OK") : Command::CommandResult::Error("Invalid remembered network");
-        });
-
-        auto& remove = networks.Command("remove"); remove.Parameter<std::string>("ssid");
-        remove.OnExecute([this](const Command::CommandContext& context) { return _manager->RemoveClientNetwork(context.Get<std::string>("ssid")) ? Command::CommandResult::Ok("OK") : Command::CommandResult::Error("Remembered network not found"); });
-
-        auto& priority = networks.Command("priority"); priority.Parameter<std::string>("ssid"); priority.Parameter<unsigned int>("priority").Range(0,65535);
-        priority.OnExecute([this](const Command::CommandContext& context) { return _manager->SetClientNetworkPriority(context.Get<std::string>("ssid"),static_cast<uint16_t>(context.Get<unsigned int>("priority"))) ? Command::CommandResult::Ok("OK") : Command::CommandResult::Error("Remembered network not found"); });
-
-        auto& ssid = client.Command("ssid"); ssid.Parameter<std::string>("ssid");
-        ssid.OnExecute([this](const Command::CommandContext& context) { auto config=_manager->Configuration(); config.Client.SSID=context.Get<std::string>("ssid"); config.Client.Enabled=true; return Result(_manager->Configure(std::move(config))); });
-        auto& password = client.Command("password"); password.Description("Set legacy client password; passwords are never returned by commands"); password.Parameter<std::string>("password");
-        password.OnExecute([this](const Command::CommandContext& context) { auto config=_manager->Configuration(); config.Client.Password=context.Get<std::string>("password"); return Result(_manager->Configure(std::move(config))); });
-        auto& addressing = client.Command("addressing"); addressing.Parameter("mode",Command::ParameterKind::Enumeration).OneOf({"dhcp","static"});
-        addressing.OnExecute([this](const Command::CommandContext& context) { auto config=_manager->Configuration(); config.Client.Addressing=context.Get<std::string>("mode")=="dhcp"?AddressMode::DHCP:AddressMode::Static; return Result(_manager->Configure(std::move(config))); });
-        AddIPv4Setter(client,"ip",[](WiFiConfiguration& c,const IPv4Address& v){c.Client.StaticNetwork.Address=v;});
-        AddIPv4Setter(client,"gateway",[](WiFiConfiguration& c,const IPv4Address& v){c.Client.StaticNetwork.Gateway=v;});
-        AddIPv4Setter(client,"subnet",[](WiFiConfiguration& c,const IPv4Address& v){c.Client.StaticNetwork.SubnetMask=v;});
-        AddIPv4Setter(client,"dns1",[](WiFiConfiguration& c,const IPv4Address& v){c.Client.StaticNetwork.PrimaryDNS=v;});
-        AddIPv4Setter(client,"dns2",[](WiFiConfiguration& c,const IPv4Address& v){c.Client.StaticNetwork.SecondaryDNS=v;});
+    WiFiCommandResponse HandleConfigure(const WiFiConfigureCommand& command, const Command::CommandExecutionContext&) {
+        return WiFiCommandDetail::FromStatus(_manager->Configure(WiFiCommandDetail::ToNative(command.Configuration)));
+    }
+    WiFiCommandResponse HandleDisable(const WiFiDisableCommand&, const Command::CommandExecutionContext&) {
+        return WiFiCommandDetail::FromStatus(_manager->Disable());
+    }
+    WiFiCommandResponse HandleConnectClient(const WiFiConnectClientCommand&, const Command::CommandExecutionContext&) {
+        return WiFiCommandDetail::FromStatus(_manager->ConnectClient());
+    }
+    WiFiCommandResponse HandleDisconnectClient(const WiFiDisconnectClientCommand&, const Command::CommandExecutionContext&) {
+        return WiFiCommandDetail::FromStatus(_manager->DisconnectClient());
+    }
+    WiFiCommandResponse HandleStartAccessPoint(const WiFiStartAccessPointCommand&, const Command::CommandExecutionContext&) {
+        return WiFiCommandDetail::FromStatus(_manager->StartAccessPoint());
+    }
+    WiFiCommandResponse HandleStopAccessPoint(const WiFiStopAccessPointCommand&, const Command::CommandExecutionContext&) {
+        return WiFiCommandDetail::FromStatus(_manager->StopAccessPoint());
+    }
+    WiFiCommandResponse HandleScan(const WiFiScanCommand&, const Command::CommandExecutionContext&) {
+        return WiFiCommandDetail::FromStatus(_manager->Scan());
+    }
+    WiFiCommandResponse HandleRetryKnownNetworks(const WiFiRetryKnownNetworksCommand&, const Command::CommandExecutionContext&) {
+        return WiFiCommandDetail::FromStatus(_manager->RetryKnownNetworksNow());
+    }
+    WiFiCommandResponse HandleUpsertClientNetwork(const WiFiUpsertClientNetworkCommand& command, const Command::CommandExecutionContext&) {
+        return _manager->AddOrUpdateClientNetwork(WiFiCommandDetail::ToNative(command.Profile))
+            ? WiFiCommandResponse{WiFiCommandOutcome::Success}
+            : WiFiCommandResponse{WiFiCommandOutcome::InvalidConfiguration};
+    }
+    WiFiCommandResponse HandleRemoveClientNetwork(const WiFiRemoveClientNetworkCommand& command, const Command::CommandExecutionContext&) {
+        return _manager->RemoveClientNetwork(command.SSID.view())
+            ? WiFiCommandResponse{WiFiCommandOutcome::Success}
+            : WiFiCommandResponse{WiFiCommandOutcome::NetworkNotFound};
+    }
+    WiFiCommandResponse HandleSetClientNetworkPriority(const WiFiSetClientNetworkPriorityCommand& command, const Command::CommandExecutionContext&) {
+        return _manager->SetClientNetworkPriority(command.SSID.view(), command.Priority)
+            ? WiFiCommandResponse{WiFiCommandOutcome::Success}
+            : WiFiCommandResponse{WiFiCommandOutcome::NetworkNotFound};
+    }
+    WiFiCommandResponse HandleSaveConfiguration(const WiFiSaveConfigurationCommand&, const Command::CommandExecutionContext&) {
+        return WiFiCommandDetail::FromStoreStatus(_manager->SaveConfiguration());
+    }
+    WiFiCommandResponse HandleLoadConfiguration(const WiFiLoadConfigurationCommand& command, const Command::CommandExecutionContext&) {
+        return WiFiCommandDetail::FromStoreStatus(_manager->LoadConfiguration(command.Apply));
     }
 
-    void ConfigureAccessPointCommands(Command::CommandNode& ap) {
-        ap.Command("status").OnExecute([this](const Command::CommandContext&) { const auto state=_manager->State().AccessPoint; std::ostringstream out; out<<"state="<<APStateName(state.State)<<" ssid="<<state.SSID<<" channel="<<static_cast<unsigned>(state.Channel)<<" stations="<<state.ConnectedStations<<" ip="<<state.Network.Address.ToString(); return Command::CommandResult::Ok(out.str()); });
-        ap.Command("start").OnExecute([this](const Command::CommandContext&) { return Result(_manager->StartAccessPoint()); });
-        ap.Command("stop").OnExecute([this](const Command::CommandContext&) { return Result(_manager->StopAccessPoint()); });
-        auto& ssid=ap.Command("ssid"); ssid.Parameter<std::string>("ssid"); ssid.OnExecute([this](const Command::CommandContext& context){auto c=_manager->Configuration();c.AccessPoint.SSID=context.Get<std::string>("ssid");c.AccessPoint.Enabled=true;return Result(_manager->Configure(std::move(c)));});
-        auto& password=ap.Command("password"); password.Parameter<std::string>("password"); password.OnExecute([this](const Command::CommandContext& context){auto c=_manager->Configuration();c.AccessPoint.Password=context.Get<std::string>("password");return Result(_manager->Configure(std::move(c)));});
-        auto& channel=ap.Command("channel"); channel.Parameter<unsigned int>("channel").Range(1,14); channel.OnExecute([this](const Command::CommandContext& context){auto c=_manager->Configuration();c.AccessPoint.Channel=static_cast<uint8_t>(context.Get<unsigned int>("channel"));return Result(_manager->Configure(std::move(c)));});
-        auto& dhcp=ap.Command("dhcp"); auto& enabled=dhcp.Command("enabled"); enabled.Parameter<bool>("enabled"); enabled.OnExecute([this](const Command::CommandContext& context){auto c=_manager->Configuration();c.AccessPoint.DHCP.Enabled=context.Get<bool>("enabled");return Result(_manager->Configure(std::move(c)));});
-        AddIPv4Setter(dhcp,"lease-start",[](WiFiConfiguration& c,const IPv4Address& v){c.AccessPoint.DHCP.LeaseStart=v;});
-        AddIPv4Setter(dhcp,"lease-end",[](WiFiConfiguration& c,const IPv4Address& v){c.AccessPoint.DHCP.LeaseEnd=v;});
-    }
-
-    void ConfigureAPUntilClientCommands(Command::CommandNode& node) {
-        node.Command("status").Description("Show APUntilClient lifecycle state")
-            .OnExecute([this](const Command::CommandContext&) { return APUntilClientStatus(); });
-        node.Command("retry-now").Description("Immediately scan and retry remembered networks")
-            .OnExecute([this](const Command::CommandContext&) { return Result(_manager->RetryKnownNetworksNow()); });
-        auto& fallback=node.Command("fallback-timeout").Description("Set delay before fallback AP activates when remembered networks cannot connect");
-        fallback.Parameter<unsigned int>("milliseconds");
-        fallback.OnExecute([this](const Command::CommandContext& context){auto c=_manager->Configuration();c.APUntilClient.FallbackTimeoutMilliseconds=static_cast<uint32_t>(context.Get<unsigned int>("milliseconds"));return Result(_manager->Configure(std::move(c)));});
-        auto& retry=node.Command("retry-interval").Description("Set scan retry interval while fallback AP is active");
-        retry.Parameter<unsigned int>("milliseconds");
-        retry.OnExecute([this](const Command::CommandContext& context){auto c=_manager->Configuration();c.APUntilClient.RetryScanIntervalMilliseconds=static_cast<uint32_t>(context.Get<unsigned int>("milliseconds"));return Result(_manager->Configure(std::move(c)));});
-    }
-
-    void ConfigureConfigurationCommands(Command::CommandNode& config) {
-        config.Command("show").Description("Show configuration with credentials always redacted").OnExecute([this](const Command::CommandContext&) { return ShowConfiguration(); });
-        config.Command("save").OnExecute([this](const Command::CommandContext&) { return StoreResult(_manager->SaveConfiguration()); });
-        config.Command("load").OnExecute([this](const Command::CommandContext&) { return StoreResult(_manager->LoadConfiguration(true)); });
-        config.Command("reset").OnExecute([this](const Command::CommandContext&) { return Result(_manager->Configure(WiFiConfiguration{})); });
-        auto& hostname=config.Command("hostname"); hostname.Parameter<std::string>("hostname"); hostname.OnExecute([this](const Command::CommandContext& context){auto c=_manager->Configuration();c.Hostname=context.Get<std::string>("hostname");return Result(_manager->Configure(std::move(c)));});
-        auto& tx=config.Command("tx-power"); tx.Parameter<int>("dbm").Range(2,20); tx.OnExecute([this](const Command::CommandContext& context){auto c=_manager->Configuration();c.TxPowerDbm=static_cast<int8_t>(context.Get<int>("dbm"));return Result(_manager->Configure(std::move(c)));});
-        auto& power=config.Command("power-save"); power.Parameter<bool>("enabled"); power.OnExecute([this](const Command::CommandContext& context){auto c=_manager->Configuration();c.PowerSave=context.Get<bool>("enabled");return Result(_manager->Configure(std::move(c)));});
-    }
-
-    template<typename Setter> void AddIPv4Setter(Command::CommandNode& parent,const char* name,Setter setter) { auto& command=parent.Command(name); command.Parameter<std::string>("address"); command.OnExecute([this,setter](const Command::CommandContext& context){IPv4Address address;if(!ParseIPv4(context.Get<std::string>("address"),address))return Command::CommandResult::Error("Invalid IPv4 address");auto c=_manager->Configuration();setter(c,address);return Result(_manager->Configure(std::move(c)));}); }
-
-    Command::CommandResult Status() const { const auto state=_manager->State(); std::ostringstream out; out<<"mode="<<ModeName(state.Mode)<<" ap="<<APStateName(state.AccessPoint.State)<<" stations="<<state.AccessPoint.ConnectedStations<<" client="<<ClientStateName(state.Client.State)<<" ip="<<state.Client.Network.Address.ToString()<<" scan="<<ScanStateName(state.Scan)<<" selection="<<SelectionStateName(state.Client.Selection.State)<<" ap-until-client="<<APUntilClientStateName(state.APUntilClient.State); return Command::CommandResult::Ok(out.str()); }
-    Command::CommandResult APUntilClientStatus() const { const auto state=_manager->State().APUntilClient; std::ostringstream out; out<<"state="<<APUntilClientStateName(state.State)<<" fallback-ap="<<(state.FallbackAccessPointActive?"true":"false")<<" fallback-deadline-ms="<<state.FallbackDeadlineMilliseconds<<" next-retry-ms="<<state.NextRetryMilliseconds; return Command::CommandResult::Ok(out.str()); }
-    Command::CommandResult ScanResults() const { const auto results=_manager->LastScanResults(); std::ostringstream out; out<<"networks="<<results.size(); for(std::size_t i=0;i<results.size();++i) out<<"\n["<<i<<"] ssid="<<results[i].SSID<<" rssi="<<results[i].RSSI<<" channel="<<static_cast<unsigned>(results[i].Channel)<<" security="<<SecurityName(results[i].Security); return Command::CommandResult::Ok(out.str()); }
-    Command::CommandResult RememberedNetworks() const { auto profiles=_manager->Configuration().Client.Networks; std::sort(profiles.begin(),profiles.end(),[](const auto&a,const auto&b){if(a.Priority!=b.Priority)return a.Priority>b.Priority;return a.SSID<b.SSID;}); std::ostringstream out; out<<"remembered-networks="<<profiles.size(); for(const auto& p:profiles) out<<"\nssid="<<p.SSID<<" priority="<<p.Priority<<" enabled="<<(p.Enabled?"true":"false")<<" password=<redacted> addressing="<<(p.Addressing==AddressMode::DHCP?"dhcp":"static"); return Command::CommandResult::Ok(out.str()); }
-    Command::CommandResult ShowConfiguration() const { const auto c=_manager->Configuration(); std::ostringstream out; out<<"mode="<<ModeName(c.Mode)<<" hostname="<<c.Hostname<<" tx-power="<<static_cast<int>(c.TxPowerDbm)<<" power-save="<<(c.PowerSave?"true":"false")<<" ap-until-client.fallback-timeout-ms="<<c.APUntilClient.FallbackTimeoutMilliseconds<<" ap-until-client.retry-interval-ms="<<c.APUntilClient.RetryScanIntervalMilliseconds<<"\nap.ssid="<<c.AccessPoint.SSID<<" ap.password=<redacted> ap.channel="<<static_cast<unsigned>(c.AccessPoint.Channel)<<" ap.dhcp="<<(c.AccessPoint.DHCP.Enabled?"true":"false")<<"\nclient.automatic-selection="<<(c.Client.Selection.AutomaticSelection?"true":"false")<<" client.remembered-networks="<<c.Client.Networks.size()<<"\nclient.legacy.ssid="<<c.Client.SSID<<" client.legacy.password=<redacted> client.legacy.addressing="<<(c.Client.Addressing==AddressMode::DHCP?"dhcp":"static"); return Command::CommandResult::Ok(out.str()); }
-
-    static Command::CommandResult Result(WiFiStatus status){return status==WiFiStatus::Success?Command::CommandResult::Ok("OK"):Command::CommandResult::Error(StatusName(status));}
-    static Command::CommandResult StoreResult(const WiFiConfigurationStoreResult& result){return result.Success()?Command::CommandResult::Ok("OK"):Command::CommandResult::Error(result.Message.empty()?"WiFi configuration persistence failed":result.Message);}
-    static bool ParseIPv4(const std::string& text,IPv4Address& output){unsigned a=0,b=0,c=0,d=0;char tail=0;if(std::sscanf(text.c_str(),"%u.%u.%u.%u%c",&a,&b,&c,&d,&tail)!=4||a>255||b>255||c>255||d>255)return false;output=IPv4Address(static_cast<uint8_t>(a),static_cast<uint8_t>(b),static_cast<uint8_t>(c),static_cast<uint8_t>(d));return true;}
-    static const char* StatusName(WiFiStatus v){switch(v){case WiFiStatus::Success:return"success";case WiFiStatus::InvalidConfiguration:return"invalid configuration";case WiFiStatus::NotSupported:return"not supported";case WiFiStatus::Busy:return"busy";default:return"platform error";}}
-    static const char* ModeName(WiFiMode v){switch(v){case WiFiMode::Off:return"off";case WiFiMode::Disabled:return"disabled";case WiFiMode::Client:return"client";case WiFiMode::AccessPoint:return"ap";case WiFiMode::AccessPointClient:return"ap-client";case WiFiMode::APUntilClient:return"ap-until-client";default:return"unknown";}}
-    static const char* ClientStateName(ClientState v){switch(v){case ClientState::Disabled:return"disabled";case ClientState::Idle:return"idle";case ClientState::Connecting:return"connecting";case ClientState::Connected:return"connected";case ClientState::Reconnecting:return"reconnecting";case ClientState::Disconnecting:return"disconnecting";case ClientState::Disconnected:return"disconnected";default:return"failed";}}
-    static const char* APStateName(AccessPointState v){switch(v){case AccessPointState::Disabled:return"disabled";case AccessPointState::Starting:return"starting";case AccessPointState::Active:return"active";default:return"failed";}}
-    static const char* APUntilClientStateName(APUntilClientState v){switch(v){case APUntilClientState::Inactive:return"inactive";case APUntilClientState::SeekingClient:return"seeking-client";case APUntilClientState::FallbackAccessPoint:return"fallback-access-point";case APUntilClientState::ClientConnected:return"client-connected";default:return"unknown";}}
-    static const char* ScanStateName(ScanState v){switch(v){case ScanState::Idle:return"idle";case ScanState::Scanning:return"scanning";case ScanState::Complete:return"complete";default:return"failed";}}
-    static const char* SecurityName(NetworkSecurity v){switch(v){case NetworkSecurity::Open:return"open";case NetworkSecurity::WEP:return"wep";case NetworkSecurity::WPA:return"wpa";case NetworkSecurity::WPA2:return"wpa2";case NetworkSecurity::WPA_WPA2:return"wpa-wpa2";case NetworkSecurity::WPA3:return"wpa3";case NetworkSecurity::WPA2_WPA3:return"wpa2-wpa3";default:return"unknown";}}
-    static const char* SelectionStateName(ClientNetworkSelectionState v){switch(v){case ClientNetworkSelectionState::Idle:return"idle";case ClientNetworkSelectionState::Scanning:return"scanning";case ClientNetworkSelectionState::Selecting:return"selecting";case ClientNetworkSelectionState::Connecting:return"connecting";case ClientNetworkSelectionState::Connected:return"connected";case ClientNetworkSelectionState::NoKnownNetworkAvailable:return"no-known-network";default:return"exhausted";}}
-
-    WiFiManager* _manager=nullptr;
-    Command::CommandRegistrationHandle _registration;
+    WiFiManager* _manager = nullptr;
+    Command::Runtime* _runtime = nullptr;
 };
+
+/// Registers the complete fixed WiFi administrative Command set into a caller-
+/// owned TypeDirectory. Directory capacity/freeze timing remain caller-owned.
+template<std::size_t Capacity>
+Primitive::TypeDirectoryRegistrationStatus RegisterWiFiCommandTypes(Primitive::TypeDirectory<Capacity>& directory) noexcept {
+    using Status = Primitive::TypeDirectoryRegistrationStatus;
+#define ESPRESSIO_WIFI_REGISTER_COMMAND(Type) \
+    do { const auto status = directory.template Register<Type>(); if (status != Status::Success) return status; } while (false)
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiConfigureCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiDisableCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiConnectClientCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiDisconnectClientCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiStartAccessPointCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiStopAccessPointCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiScanCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiRetryKnownNetworksCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiUpsertClientNetworkCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiRemoveClientNetworkCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiSetClientNetworkPriorityCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiSaveConfigurationCommand);
+    ESPRESSIO_WIFI_REGISTER_COMMAND(WiFiLoadConfigurationCommand);
+#undef ESPRESSIO_WIFI_REGISTER_COMMAND
+    return Status::Success;
+}
 
 } // namespace ESPressio::WiFi
