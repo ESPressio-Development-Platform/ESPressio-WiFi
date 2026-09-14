@@ -234,12 +234,12 @@ inline WiFiCommandResponse FromStoreStatus(const WiFiConfigurationStoreResult& r
 // administrative contract returned an operation result; generic dynamic tools
 // therefore see RequesterRequired rather than silently discarding status.
 #define ESPRESSIO_WIFI_COMMAND_METADATA(IdValue, NameValue) \
-    static constexpr Command::CommandTypeId TypeId{IdValue}; \
+    static constexpr ::ESPressio::Command::CommandTypeId TypeId{IdValue}; \
     static constexpr std::string_view CanonicalName = NameValue; \
     static constexpr std::size_t MaximumLiveInstances = 2; \
     static constexpr std::size_t MaximumPendingExecutions = 1; \
     static constexpr std::size_t MaximumPendingResponses = 2; \
-    using ExecutionAdmissionPolicy = Command::RequiredExecution
+    using ExecutionAdmissionPolicy = ::ESPressio::Command::RequiredExecution
 
 class WiFiConfigureCommand final
     : public Command::SerializableCommand<WiFiConfigureCommand, WiFiCommandResponse> {
