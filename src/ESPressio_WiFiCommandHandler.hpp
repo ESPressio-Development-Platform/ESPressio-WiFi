@@ -149,6 +149,8 @@ struct WiFiCommandResponse final : Serializable::Serializable<WiFiCommandRespons
     ESPRESSIO_SERIALIZABLE_SCHEMA_VERSION(1)
 public:
     WiFiCommandOutcome Outcome = WiFiCommandOutcome::Success;
+    WiFiCommandResponse() = default;
+    explicit WiFiCommandResponse(WiFiCommandOutcome outcome) noexcept : Outcome(outcome) {}
     constexpr bool Succeeded() const noexcept { return Outcome == WiFiCommandOutcome::Success; }
     ESPRESSIO_SERIALIZABLE_PROPERTIES(ESPRESSIO_PROPERTY("outcome", Outcome))
 };
@@ -204,25 +206,25 @@ inline WiFiConfiguration ToNative(const WiFiAdministrativeConfiguration& source)
 
 inline WiFiCommandResponse FromStatus(WiFiStatus status) noexcept {
     switch (status) {
-        case WiFiStatus::Success: return {WiFiCommandOutcome::Success};
-        case WiFiStatus::InvalidConfiguration: return {WiFiCommandOutcome::InvalidConfiguration};
-        case WiFiStatus::NotSupported: return {WiFiCommandOutcome::NotSupported};
-        case WiFiStatus::Busy: return {WiFiCommandOutcome::Busy};
-        case WiFiStatus::PlatformError: return {WiFiCommandOutcome::PlatformError};
+        case WiFiStatus::Success: return WiFiCommandResponse{WiFiCommandOutcome::Success};
+        case WiFiStatus::InvalidConfiguration: return WiFiCommandResponse{WiFiCommandOutcome::InvalidConfiguration};
+        case WiFiStatus::NotSupported: return WiFiCommandResponse{WiFiCommandOutcome::NotSupported};
+        case WiFiStatus::Busy: return WiFiCommandResponse{WiFiCommandOutcome::Busy};
+        case WiFiStatus::PlatformError: return WiFiCommandResponse{WiFiCommandOutcome::PlatformError};
     }
-    return {WiFiCommandOutcome::PlatformError};
+    return WiFiCommandResponse{WiFiCommandOutcome::PlatformError};
 }
 
 inline WiFiCommandResponse FromStoreStatus(const WiFiConfigurationStoreResult& result) noexcept {
     switch (result.Status) {
-        case WiFiConfigurationStoreStatus::Success: return {WiFiCommandOutcome::Success};
-        case WiFiConfigurationStoreStatus::NotConfigured: return {WiFiCommandOutcome::PersistenceNotConfigured};
-        case WiFiConfigurationStoreStatus::NotFound: return {WiFiCommandOutcome::PersistenceNotFound};
-        case WiFiConfigurationStoreStatus::StorageError: return {WiFiCommandOutcome::PersistenceStorageError};
-        case WiFiConfigurationStoreStatus::SerializationError: return {WiFiCommandOutcome::PersistenceSerializationError};
-        case WiFiConfigurationStoreStatus::ProtectionError: return {WiFiCommandOutcome::PersistenceProtectionError};
+        case WiFiConfigurationStoreStatus::Success: return WiFiCommandResponse{WiFiCommandOutcome::Success};
+        case WiFiConfigurationStoreStatus::NotConfigured: return WiFiCommandResponse{WiFiCommandOutcome::PersistenceNotConfigured};
+        case WiFiConfigurationStoreStatus::NotFound: return WiFiCommandResponse{WiFiCommandOutcome::PersistenceNotFound};
+        case WiFiConfigurationStoreStatus::StorageError: return WiFiCommandResponse{WiFiCommandOutcome::PersistenceStorageError};
+        case WiFiConfigurationStoreStatus::SerializationError: return WiFiCommandResponse{WiFiCommandOutcome::PersistenceSerializationError};
+        case WiFiConfigurationStoreStatus::ProtectionError: return WiFiCommandResponse{WiFiCommandOutcome::PersistenceProtectionError};
     }
-    return {WiFiCommandOutcome::PersistenceStorageError};
+    return WiFiCommandResponse{WiFiCommandOutcome::PersistenceStorageError};
 }
 
 } // namespace WiFiCommandDetail
