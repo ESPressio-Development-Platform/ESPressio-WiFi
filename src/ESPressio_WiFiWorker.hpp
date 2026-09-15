@@ -4,41 +4,51 @@
 #include <cstdint>
 #include <mutex>
 
-#include <ESPressio_PrecisionThread.hpp>
-#include <ESPressio_PrecisionThreadTraits.hpp>
-#include <ESPressio_Time.hpp>
+#include <ESPressio_Precision.hpp>
+#include <ESPressio_ThreadWith.hpp>
 #include "ESPressio_WiFi.hpp"
 
 namespace ESPressio::WiFi {
-
 
 struct WiFiWorkerConfiguration {
     uint32_t IterationPeriodMilliseconds = 50;
     uint32_t DesiredExecutionBudgetMilliseconds = 5;
 };
 
-
-class WiFiWorker final
-    : public Threads::PrecisionThread<
-          Units::NanoSeconds<uint64_t>,
-          Threads::PrecisionThreadTraits<Units::NanoSeconds<uint64_t>>
-      > {
+/// <summary>
+/// Autonomous WiFi service worker composed from the final generic Thread host
+/// and the resident Precision capability.
+/// </summary>
+/// <remarks>
+/// The worker owns no scheduler, private wake signal, or secondary task. WiFi
+/// work notifications use Precision::Bump(), which publishes immediate
+/// application eligibility through the Thread's one common wake path.
+/// </remarks>
+class WiFiWorker final : public Threads::ThreadWith<Threads::Precision<8>> {
 public:
-    using Time = Units::NanoSeconds<uint64_t>;
-    using Base = Threads::PrecisionThread<Time, Threads::PrecisionThreadTraits<Time>>;
+    using PrecisionCapability = Threads::Precision<8>;
+    using Base = Threads::ThreadWith<PrecisionCapability>;
+
+    // Preserve access to the root execution/stack configuration overload. The
+    // WiFi runtime-tuning overload below is a distinct domain configuration.
+    using Base::Configure;
 
     explicit WiFiWorker(
         WiFiManager& manager,
         WiFiWorkerConfiguration configuration = {}
-    ) : _manager(manager), _configuration(configuration) {
-        SetStartOnInitialize(false);
+    )
+        : Base(Threads::ThreadConfiguration{}),
+          _manager(manager),
+          _configuration(configuration) {
         ApplyRuntimeConfiguration(configuration);
-        _manager.SetWorkSignal([this]() { this->Bump(); });
+        _manager.SetWorkSignal([this]() { Bump(); });
     }
 
     ~WiFiWorker() override {
+        // Close the borrowed callback before member teardown, then join the
+        // one root Thread execution context while this concrete owner is alive.
         _manager.SetWorkSignal({});
-        Shutdown();
+        (void)Shutdown();
     }
 
     WiFiWorkerConfiguration Configuration() const {
@@ -60,27 +70,32 @@ public:
     }
 
 protected:
-    void Iterate(
-        Time,
-        Time,
-        Threads::SkippedIterationCount
-    ) override {
+    Threads::ThreadWorkDisposition OnLoop() override {
         _lastStatus.store(_manager.ProcessOnce());
+        return Threads::ThreadWorkDisposition::IdleReady;
     }
 
 private:
-    void ApplyRuntimeConfiguration(
-        const WiFiWorkerConfiguration& configuration
-    ) {
-        const auto period = Units::MilliSeconds<uint32_t>(
-            configuration.IterationPeriodMilliseconds
-        );
-        const auto desiredExecutionBudget = Units::MilliSeconds<uint32_t>(
-            configuration.DesiredExecutionBudgetMilliseconds
-        );
+    static constexpr uint64_t MillisecondsToNanoseconds(uint32_t milliseconds) noexcept {
+        return static_cast<uint64_t>(milliseconds) * 1000000ULL;
+    }
 
-        SetIterationPeriod(period);
-        SetDesiredIterationPeriod(desiredExecutionBudget);
+    PrecisionCapability& Precision() noexcept {
+        return GetCapability<Threads::PrecisionTag>();
+    }
+
+    void Bump() {
+        Precision().Bump();
+    }
+
+    void ApplyRuntimeConfiguration(const WiFiWorkerConfiguration& configuration) {
+        auto& precision = Precision();
+        precision.SetCadencePeriod(
+            MillisecondsToNanoseconds(configuration.IterationPeriodMilliseconds)
+        );
+        precision.SetIterationExecutionBudget(
+            MillisecondsToNanoseconds(configuration.DesiredExecutionBudgetMilliseconds)
+        );
     }
 
     WiFiManager& _manager;
