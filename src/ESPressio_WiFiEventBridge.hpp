@@ -2,7 +2,9 @@
 
 #include <atomic>
 #include <cstdint>
+#include <utility>
 
+#include <ESPressio_Event.hpp>
 #include "ESPressio_IWiFiObserver.hpp"
 #include "ESPressio_WiFi.hpp"
 #include "ESPressio_WiFiEvents.hpp"
@@ -75,8 +77,9 @@ private:
     template<class TEvent, class... Args>
     void Emit(Args&&... args) noexcept {
         try {
-            if (!TEvent::TryDispatch(std::forward<Args>(args)...))
+            if (!TEvent::TryDispatch(std::forward<Args>(args)...)) {
                 _unavailableDispatches.fetch_add(1, std::memory_order_relaxed);
+            }
         } catch (...) {
             _unavailableDispatches.fetch_add(1, std::memory_order_relaxed);
         }
