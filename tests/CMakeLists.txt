@@ -29,6 +29,12 @@ target_include_directories(espressio_wifi_primitive_family_migration PRIVATE ${W
 target_compile_options(espressio_wifi_primitive_family_migration PRIVATE -Wall -Wextra -Werror -fno-rtti -UNDEBUG)
 target_link_libraries(espressio_wifi_primitive_family_migration PRIVATE Threads::Threads)
 
+add_executable(espressio_wifi_worker_contract test_wifi_worker.cpp)
+target_include_directories(espressio_wifi_worker_contract PRIVATE ${WIFI_TEST_INCLUDES})
+target_compile_options(espressio_wifi_worker_contract PRIVATE -Wall -Wextra -Werror -fno-rtti -UNDEBUG)
+target_link_libraries(espressio_wifi_worker_contract PRIVATE Threads::Threads)
+
 add_test(NAME ESPressioWiFiTests COMMAND espressio_wifi_tests)
 add_test(NAME ESPressioWiFiConfigurationTests COMMAND espressio_wifi_configuration_tests)
 add_test(NAME ESPressioWiFiPrimitiveFamilyMigration COMMAND espressio_wifi_primitive_family_migration)
+add_test(NAME ESPressioWiFiWorkerContract COMMAND espressio_wifi_worker_contract)
